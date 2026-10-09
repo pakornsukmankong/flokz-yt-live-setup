@@ -197,17 +197,17 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
           <label>
             ตอนถัดไป (EP)
             <input
-              type="number"
-              min={1}
-              value={draft.next_ep}
-              onChange={(e) => set({ next_ep: Math.max(1, Number(e.target.value) || 1) })}
+              type="text"
+              inputMode="numeric"
+              value={draft.next_ep || ''}
+              onChange={(e) => set({ next_ep: Number(e.target.value.replace(/\D/g, '').slice(0, 6)) })}
             />
           </label>
           <label>
             ชื่อคลิป <span className="muted">ใช้ {'{game}'} {'{ep}'} {'{text}'} ได้</span>
             <input value={draft.title_template} onChange={(e) => set({ title_template: e.target.value })} />
           </label>
-          <p className="muted">ตัวอย่าง: {renderTemplate(draft.title_template, draft)}</p>
+          <p className="muted">ตัวอย่าง: {renderTemplate(draft.title_template, { ...draft, next_ep: draft.next_ep || 1 })}</p>
           <label>
             หมวดหมู่
             <select value={draft.category_id} onChange={(e) => set({ category_id: e.target.value })}>
