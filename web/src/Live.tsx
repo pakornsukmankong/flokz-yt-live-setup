@@ -21,6 +21,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const [presetId, setPresetId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [result, setResult] = useState<ApplyResult | null>(null)
   const [activePoll, setActivePoll] = useState<ActivePoll | null>(loadActivePoll)
 
@@ -28,14 +29,14 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const broadcast = broadcasts?.find((b) => b.id === broadcastId)
 
   const loadBroadcasts = useCallback(async () => {
-    setError('')
+    setLoadError('')
     try {
       const list = await api<Broadcast[]>('/live/broadcasts')
       setBroadcasts(list)
       // active มาก่อน upcoming จึงได้ไลฟ์ที่ออนอยู่เป็นค่าเริ่มต้น
       setBroadcastId((cur) => (list.some((b) => b.id === cur) ? cur : (list[0]?.id ?? '')))
     } catch (err) {
-      setError((err as Error).message)
+      setLoadError((err as Error).message)
       toast.error(`โหลดรายการไลฟ์ไม่สำเร็จ: ${(err as Error).message}`)
     }
   }, [])
@@ -96,7 +97,8 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
             รีเฟรช
           </button>
         </div>
-        {broadcasts === null && <p className="muted">กำลังโหลด…</p>}
+        {loadError && <p className="error">โหลดรายการไลฟ์ไม่สำเร็จ กดรีเฟรชเพื่อลองใหม่ ({loadError})</p>}
+        {broadcasts === null && !loadError && <p className="muted">กำลังโหลด…</p>}
         {broadcasts?.length === 0 && (
           <p className="muted">ไม่พบไลฟ์ที่ออนอยู่หรือตั้งรอไว้ สร้างไลฟ์ใน YouTube Studio ก่อนแล้วกดรีเฟรช</p>
         )}

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, renderTemplate, type Category, type Poll, type Preset } from './api'
+import { exportBackup, importBackup } from './backup'
 import { fitThumbnail } from './image'
 import { toast } from './toast'
 
@@ -60,14 +61,26 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
         method: draft.id ? 'PUT' : 'POST',
         json: draft,
       })
+      // ผูกฟอร์มกับ preset ที่บันทึกแล้วทันที ถ้าขั้นภาพปกพลาด การกดบันทึกซ้ำจะไม่สร้าง preset ซ้ำ
+      setDraft((d) => (d ? { ...d, id: saved.id } : d))
+      let thumbError = ''
       if (file) {
-        const form = new FormData()
-        form.append('file', await fitThumbnail(file))
-        await api(`/presets/${saved.id}/thumbnail`, { form })
+        try {
+          const form = new FormData()
+          form.append('file', await fitThumbnail(file))
+          await api(`/presets/${saved.id}/thumbnail`, { form })
+        } catch (err) {
+          thumbError = (err as Error).message
+        }
       }
       await reloadPresets()
-      open(toDraft(saved))
-      toast.success(`บันทึก preset "${saved.game_title}" แล้ว`)
+      if (thumbError) {
+        setError(`บันทึก preset แล้ว แต่อัปโหลดภาพปกไม่สำเร็จ: ${thumbError}`)
+        toast.error(`บันทึก preset แล้ว แต่อัปโหลดภาพปกไม่สำเร็จ: ${thumbError}`)
+      } else {
+        open(toDraft(saved))
+        toast.success(`บันทึก preset "${saved.game_title}" แล้ว`)
+      }
     } catch (err) {
       setError((err as Error).message)
       toast.error(`บันทึกไม่สำเร็จ: ${(err as Error).message}`)
@@ -92,6 +105,52 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
     }
   }
 
+  const duplicate = async () => {
+    if (!draft?.id) return
+    setBusy(true)
+    try {
+      const copy = await api<Preset>(`/presets/${draft.id}/duplicate`, { method: 'POST' })
+      await reloadPresets()
+      open(toDraft(copy))
+      toast.success(`ทำสำเนาเป็น "${copy.game_title}" แล้ว`)
+    } catch (err) {
+      setError((err as Error).message)
+      toast.error(`ทำสำเนาไม่สำเร็จ: ${(err as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const importInput = useRef<HTMLInputElement>(null)
+
+  const backup = async () => {
+    setBusy(true)
+    try {
+      await exportBackup(presets)
+      toast.success(`สำรอง ${presets.length} preset ลงไฟล์แล้ว`)
+    } catch (err) {
+      toast.error(`สำรองข้อมูลไม่สำเร็จ: ${(err as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restore = async (backupFile: File) => {
+    setBusy(true)
+    try {
+      const res = await importBackup(backupFile, presets)
+      await reloadPresets()
+      toast.success(
+        `นำเข้า ${res.added} preset` + (res.skipped.length ? ` ข้าม ${res.skipped.length} รายการที่มีชื่อเกมนี้อยู่แล้ว` : ''),
+      )
+      res.failed.forEach((f) => toast.error(`นำเข้าไม่สำเร็จ: ${f}`))
+    } catch (err) {
+      toast.error(`นำเข้าไม่สำเร็จ: ${(err as Error).message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const current = presets.find((p) => p.id === draft?.id)
   const preview = file ? URL.createObjectURL(file) : current?.thumbnail_url
 
@@ -107,6 +166,25 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
           </button>
         ))}
         {!presets.length && <p className="muted">ยังไม่มี preset</p>}
+        <div className="row backup">
+          <button className="btn" disabled={busy || !presets.length} onClick={backup}>
+            สำรองข้อมูล
+          </button>
+          <button className="btn" disabled={busy} onClick={() => importInput.current?.click()}>
+            นำเข้า
+          </button>
+          <input
+            ref={importInput}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (f) restore(f)
+            }}
+          />
+        </div>
       </aside>
 
       {draft && (
@@ -197,9 +275,14 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
               {busy ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
             {draft.id && (
-              <button className="btn danger" disabled={busy} onClick={remove}>
-                ลบ preset
-              </button>
+              <>
+                <button className="btn" disabled={busy} onClick={duplicate}>
+                  ทำสำเนา
+                </button>
+                <button className="btn danger" disabled={busy} onClick={remove}>
+                  ลบ preset
+                </button>
+              </>
             )}
           </div>
         </section>

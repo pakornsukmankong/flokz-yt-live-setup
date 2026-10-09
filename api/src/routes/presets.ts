@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { db, HttpError, THUMBNAIL_DIR, type Account } from '../db.js'
@@ -118,6 +118,36 @@ export async function presetRoutes(app: FastifyInstance) {
       savePolls(id, polls)
     })()
     return toResponse(getPreset(req.account, id))
+  })
+
+  app.post('/api/presets/:id/duplicate', async (req) => {
+    const { id } = req.params as { id: string }
+    const src = getPreset(req.account, id)
+    const copyId = randomUUID()
+
+    let thumbnail_path: string | null = null
+    if (src.thumbnail_path) {
+      thumbnail_path = `${copyId}.${src.thumbnail_path.split('.').pop()}`
+      await copyFile(join(THUMBNAIL_DIR, src.thumbnail_path), join(THUMBNAIL_DIR, thumbnail_path))
+    }
+
+    db.transaction(() => {
+      db.prepare(
+        `insert into presets (id, account_id, game_title, title_template, text, description, category_id, thumbnail_path)
+         values (@id, @account_id, @game_title, @title_template, @text, @description, @category_id, @thumbnail_path)`,
+      ).run({
+        id: copyId,
+        account_id: req.account.id,
+        game_title: `${src.game_title} (สำเนา)`,
+        title_template: src.title_template,
+        text: src.text,
+        description: src.description,
+        category_id: src.category_id,
+        thumbnail_path,
+      })
+      savePolls(copyId, src.preset_polls)
+    })()
+    return toResponse(getPreset(req.account, copyId))
   })
 
   app.delete('/api/presets/:id', async (req) => {
