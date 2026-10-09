@@ -56,7 +56,7 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <strong>YT Live Setup</strong>
+        <strong className="brand">YT Live Setup</strong>
         <nav>
           <button className={tab === 'live' ? 'tab on' : 'tab'} onClick={() => setTab('live')}>
             ไลฟ์
