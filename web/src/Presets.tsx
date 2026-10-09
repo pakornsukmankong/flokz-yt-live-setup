@@ -105,6 +105,31 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
     }
   }
 
+  // เติมฟอร์ม preset ใหม่จาก preset เดิม ชื่อเกมกับเลข EP ไม่ถูกแตะ
+  const copyFrom = async (id: string) => {
+    const src = presets.find((p) => p.id === id)
+    if (!src) return
+    set({
+      title_template: src.title_template,
+      text: src.text,
+      description: src.description,
+      category_id: src.category_id,
+      polls: src.polls.map((x) => ({ question: x.question, options: [...x.options] })),
+    })
+    setFile(null)
+    if (src.thumbnail_url) {
+      try {
+        const res = await fetch(src.thumbnail_url)
+        if (!res.ok) throw new Error(res.statusText)
+        const blob = await res.blob()
+        setFile(new File([blob], 'thumbnail', { type: blob.type }))
+      } catch {
+        toast.error(`คัดลอกภาพปกจาก "${src.game_title}" ไม่สำเร็จ`)
+      }
+    }
+    toast.success(`ใช้ข้อมูลจาก "${src.game_title}" แล้ว`)
+  }
+
   const duplicate = async () => {
     if (!draft?.id) return
     setBusy(true)
@@ -189,6 +214,21 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
 
       {draft && (
         <section className="card form">
+          {!draft.id && presets.length > 0 && (
+            <label>
+              ใช้ข้อมูลจาก preset เดิม <span className="muted">คัดลอกทุกอย่างยกเว้นชื่อเกมและ EP</span>
+              <select value="" onChange={(e) => copyFrom(e.target.value)}>
+                <option value="" disabled>
+                  เลือก preset…
+                </option>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.game_title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             ชื่อเกม
             <input value={draft.game_title} onChange={(e) => set({ game_title: e.target.value })} />
