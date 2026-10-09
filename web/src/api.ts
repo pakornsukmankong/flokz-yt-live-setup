@@ -14,7 +14,7 @@ export type Preset = {
 
 export type Broadcast = { id: string; title: string; status: 'active' | 'upcoming'; thumbnail: string | null }
 export type Category = { id: string; title: string }
-export type Me = { email: string; channelTitle: string | null; facebook: boolean }
+export type Me = { email: string; channelTitle: string | null }
 
 export class ApiError extends Error {
   constructor(

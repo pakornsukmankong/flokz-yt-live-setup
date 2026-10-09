@@ -72,7 +72,7 @@ export function App() {
       </header>
       <main>
         {tab === 'live' ? (
-          <Live presets={presets} reloadPresets={reloadPresets} facebookEnabled={me.facebook} />
+          <Live presets={presets} reloadPresets={reloadPresets} />
         ) : (
           <Presets presets={presets} reloadPresets={reloadPresets} />
         )}
