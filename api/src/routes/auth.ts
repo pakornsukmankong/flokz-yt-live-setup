@@ -83,6 +83,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/me', { preHandler: requireAccount }, async (req) => ({
     email: req.account.email,
     channelTitle: req.account.channel_title,
+    facebook: config.facebook !== null,
   }))
 
   app.post('/api/auth/logout', async (_req, reply) => {

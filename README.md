@@ -49,6 +49,17 @@ push โฟลเดอร์นี้ขึ้น GitHub ก่อน แล้
 
 เบราว์เซอร์คุยกับ Vercel โดเมนเดียว แล้ว Vercel ส่งต่อ `/api/*` ไป Railway cookie login จึงเป็น first-party
 
+## 4. โพสต์ลงเพจ Facebook (ไม่บังคับ)
+
+ปุ่ม "โพสต์ลงเพจ" ในแท็บไลฟ์จะโพสต์ภาพปกของ preset พร้อมชื่อคลิปลงเพจ แล้วคอมเมนต์ลิงก์ไลฟ์ใต้โพสต์ ต้องใส่ตัวแปรสองตัวบน Railway:
+
+1. สร้างแอปที่ https://developers.facebook.com/apps (ประเภท Business) ด้วยบัญชีที่เป็นแอดมินเพจ
+2. เปิด Tools > Graph API Explorer เลือกแอป เพิ่มสิทธิ์ `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `pages_manage_posts`, `pages_manage_engagement` แล้วกด Generate Access Token และเลือกเพจ
+3. เปิด Tools > Access Token Debugger วาง token จากขั้น 2 กด Debug แล้วกด Extend Access Token จะได้ user token แบบอายุยาว
+4. กลับไป Graph API Explorer วาง token อายุยาวลงช่อง Access Token แล้วเรียก `GET me/accounts` จะได้ `id` และ `access_token` ของเพจ (page token ที่ได้จาก user token อายุยาวจะไม่หมดอายุ)
+5. ใส่บน Railway: `FB_PAGE_ID` = `id` และ `FB_PAGE_ACCESS_TOKEN` = `access_token`
+6. สลับแอปเป็นโหมด Live (ต้องใส่ Privacy Policy URL ใน App settings > Basic) ถ้ายังเป็นโหมด Development โพสต์จะเห็นเฉพาะคนที่มีบทบาทในแอป
+
 ## ข้อจำกัดของ YouTube
 
 - **ชื่อเกม** ตั้งผ่าน API ไม่ได้ หลัง Apply ให้กดปุ่มเปิดหน้า Studio แล้วเลือกเกมเอง

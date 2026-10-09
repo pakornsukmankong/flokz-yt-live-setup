@@ -4,6 +4,7 @@ import { toast } from './toast'
 
 type ApplyResult = { title: string; warnings: string[]; gameTitle: string; studioUrl: string }
 type ActivePoll = { messageId: string; question: string }
+type FacebookResult = { postUrl: string; warnings: string[] }
 
 const POLL_KEY = 'activePoll'
 
@@ -15,7 +16,15 @@ function loadActivePoll(): ActivePoll | null {
   }
 }
 
-export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPresets: () => Promise<void> }) {
+export function Live({
+  presets,
+  reloadPresets,
+  facebookEnabled,
+}: {
+  presets: Preset[]
+  reloadPresets: () => Promise<void>
+  facebookEnabled: boolean
+}) {
   const [broadcasts, setBroadcasts] = useState<Broadcast[] | null>(null)
   const [broadcastId, setBroadcastId] = useState('')
   const [presetId, setPresetId] = useState('')
@@ -23,6 +32,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
   const [result, setResult] = useState<ApplyResult | null>(null)
+  const [fbPost, setFbPost] = useState<FacebookResult | null>(null)
   const [activePoll, setActivePoll] = useState<ActivePoll | null>(loadActivePoll)
 
   const preset = presets.find((p) => p.id === presetId)
@@ -45,6 +55,8 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   useEffect(() => {
     loadBroadcasts()
   }, [loadBroadcasts])
+
+  useEffect(() => setFbPost(null), [broadcastId])
 
   const savePoll = (p: ActivePoll | null) => {
     setActivePoll(p)
@@ -74,6 +86,17 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
       res.warnings.forEach(toast.error)
       await Promise.all([reloadPresets(), loadBroadcasts()])
     })
+
+  const postFacebook = () => {
+    if (!confirm(`โพสต์ลงเพจ Facebook?\n\n${broadcast!.title}`)) return
+    return run(async () => {
+      setFbPost(null)
+      const res = await api<FacebookResult>('/live/facebook', { json: { presetId, broadcastId } })
+      setFbPost(res)
+      toast.success('โพสต์ลงเพจ Facebook แล้ว')
+      res.warnings.forEach(toast.error)
+    })
+  }
 
   const firePoll = (pollId: string) =>
     run(async () => {
@@ -186,9 +209,48 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
         )}
       </section>
 
+      {preset && broadcast && (
+        <section className="card">
+          <h3>3. โพสต์ลงเพจ Facebook</h3>
+          {facebookEnabled ? (
+            <>
+              <div className="preview">
+                {preset.thumbnail_url && <img className="thumb small" src={preset.thumbnail_url} alt="" />}
+                <div>
+                  <strong>{broadcast.title}</strong>
+                  <p className="muted">คอมเมนต์ใต้โพสต์: {liveUrl}</p>
+                  {!preset.thumbnail_url && <p className="muted">preset นี้ไม่มีภาพปก จะโพสต์เป็นข้อความอย่างเดียว</p>}
+                </div>
+              </div>
+              <p className="muted">ข้อความโพสต์คือชื่อคลิปบน YouTube ตอนนี้ ถ้ายังไม่ตรง ให้กด Apply ก่อน</p>
+              <button className="btn primary" disabled={busy} onClick={postFacebook}>
+                โพสต์ลงเพจ
+              </button>
+              {fbPost && (
+                <div className="success">
+                  <p>
+                    โพสต์แล้ว{' '}
+                    <a className="btn" href={fbPost.postUrl} target="_blank" rel="noreferrer">
+                      เปิดโพสต์
+                    </a>
+                  </p>
+                  {fbPost.warnings.map((w) => (
+                    <p key={w} className="error">
+                      {w}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="muted">ยังไม่ได้ตั้งค่า ใส่ FB_PAGE_ID และ FB_PAGE_ACCESS_TOKEN บน Railway ก่อน (ดู README)</p>
+          )}
+        </section>
+      )}
+
       {preset && preset.polls.length > 0 && (
         <section className="card">
-          <h3>3. Poll</h3>
+          <h3>4. Poll</h3>
           {broadcast?.status !== 'active' && <p className="muted">ยิง poll ได้เมื่อไลฟ์ออนอยู่เท่านั้น</p>}
           {activePoll && (
             <div className="row between success">

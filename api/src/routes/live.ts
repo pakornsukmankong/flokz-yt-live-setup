@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { config } from '../config.js'
 import { db, HttpError, THUMBNAIL_DIR, type Account } from '../db.js'
+import { postToPage } from '../facebook.js'
 import { setThumbnail, yt } from '../google.js'
 import { getPreset, type Preset } from './presets.js'
 
@@ -90,6 +91,26 @@ export async function liveRoutes(app: FastifyInstance) {
       gameTitle: preset.game_title,
       studioUrl: `https://studio.youtube.com/video/${broadcastId}/livestreaming`,
     }
+  })
+
+  app.post('/api/live/facebook', async (req) => {
+    const { presetId, broadcastId } = req.body as { presetId: string; broadcastId: string }
+    if (!presetId || !broadcastId) throw new HttpError(400, 'ต้องเลือก preset และไลฟ์')
+    if (!config.facebook) throw new HttpError(400, 'ยังไม่ได้ตั้งค่า Facebook บน server')
+    const preset = getPreset(req.account, presetId)
+
+    // ใช้ชื่อคลิปที่อยู่บน YouTube จริง ณ ตอนนี้ จึงตรงกับไลฟ์เสมอแม้เลข EP ของ preset จะเดินไปแล้ว
+    const b = await yt(req.account, 'GET', '/liveBroadcasts', { query: { part: 'snippet', id: broadcastId } })
+    const title = b.items?.[0]?.snippet?.title as string | undefined
+    if (!title) throw new HttpError(404, 'ไม่พบไลฟ์นี้บน YouTube')
+
+    const image = preset.thumbnail_path
+      ? {
+          bytes: await readFile(join(THUMBNAIL_DIR, preset.thumbnail_path)),
+          type: preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg',
+        }
+      : null
+    return postToPage({ message: title, image, comment: `https://youtu.be/${broadcastId}` })
   })
 
   app.post('/api/live/poll', async (req) => {
