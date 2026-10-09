@@ -7,6 +7,7 @@ type Draft = {
   id?: string
   game_title: string
   title_template: string
+  text: string
   description: string
   category_id: string
   next_ep: number
@@ -16,6 +17,7 @@ type Draft = {
 const EMPTY: Draft = {
   game_title: '',
   title_template: '{game} EP.{ep}',
+  text: '',
   description: '',
   category_id: '20',
   next_ep: 1,
@@ -114,10 +116,14 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
             <input value={draft.game_title} onChange={(e) => set({ game_title: e.target.value })} />
           </label>
           <label>
-            ชื่อคลิป <span className="muted">ใช้ {'{game}'} {'{ep}'} {'{date}'} ได้</span>
+            ชื่อคลิป <span className="muted">ใช้ {'{game}'} {'{ep}'} {'{text}'} ได้</span>
             <input value={draft.title_template} onChange={(e) => set({ title_template: e.target.value })} />
           </label>
-          <p className="muted">ตัวอย่าง: {renderTemplate(draft.title_template, draft.game_title, draft.next_ep)}</p>
+          <label>
+            ข้อความ <span className="muted">แทนที่ {'{text}'} ในชื่อคลิปและ description</span>
+            <input value={draft.text} onChange={(e) => set({ text: e.target.value })} />
+          </label>
+          <p className="muted">ตัวอย่าง: {renderTemplate(draft.title_template, draft)}</p>
           <div className="row">
             <label>
               หมวดหมู่

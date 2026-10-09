@@ -19,7 +19,6 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const [broadcasts, setBroadcasts] = useState<Broadcast[] | null>(null)
   const [broadcastId, setBroadcastId] = useState('')
   const [presetId, setPresetId] = useState('')
-  const [ep, setEp] = useState(1)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ApplyResult | null>(null)
@@ -45,10 +44,6 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
     loadBroadcasts()
   }, [loadBroadcasts])
 
-  useEffect(() => {
-    if (preset) setEp(preset.next_ep)
-  }, [preset?.id, preset?.next_ep])
-
   const savePoll = (p: ActivePoll | null) => {
     setActivePoll(p)
     if (p) localStorage.setItem(POLL_KEY, JSON.stringify(p))
@@ -71,7 +66,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const apply = () =>
     run(async () => {
       setResult(null)
-      const res = await api<ApplyResult>('/live/apply', { json: { presetId, broadcastId, ep } })
+      const res = await api<ApplyResult>('/live/apply', { json: { presetId, broadcastId } })
       setResult(res)
       toast.success(`อัปเดตไลฟ์แล้ว: ${res.title}`)
       res.warnings.forEach(toast.error)
@@ -131,17 +126,11 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
             <div className="preview">
               {preset.thumbnail_url && <img className="thumb small" src={preset.thumbnail_url} alt="" />}
               <div>
-                <strong>{renderTemplate(preset.title_template, preset.game_title, ep)}</strong>
-                <p className="muted pre">{renderTemplate(preset.description, preset.game_title, ep)}</p>
+                <strong>{renderTemplate(preset.title_template, preset)}</strong>
+                <p className="muted pre">{renderTemplate(preset.description, preset)}</p>
               </div>
             </div>
             <div className="row actions">
-              {preset.title_template.includes('{ep}') && (
-                <label className="inline">
-                  EP
-                  <input type="number" min={1} value={ep} onChange={(e) => setEp(Math.max(1, Number(e.target.value) || 1))} />
-                </label>
-              )}
               <button className="btn primary" disabled={busy || !broadcastId} onClick={apply}>
                 {busy ? 'กำลังทำงาน…' : 'Apply ไปที่ YouTube'}
               </button>

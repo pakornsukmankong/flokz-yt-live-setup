@@ -7,8 +7,7 @@ import { setThumbnail, yt } from '../google.js'
 import { getPreset, type Preset } from './presets.js'
 
 function render(tpl: string, preset: Preset, ep: number): string {
-  const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok' }).format(new Date())
-  return tpl.replaceAll('{game}', preset.game_title).replaceAll('{ep}', String(ep)).replaceAll('{date}', date)
+  return tpl.replaceAll('{game}', preset.game_title).replaceAll('{ep}', String(ep)).replaceAll('{text}', preset.text)
 }
 
 async function listBroadcasts(account: Account, broadcastStatus: 'active' | 'upcoming') {

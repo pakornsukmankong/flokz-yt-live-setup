@@ -9,6 +9,7 @@ export type Preset = {
   account_id: string
   game_title: string
   title_template: string
+  text: string
   description: string
   category_id: string
   next_ep: number
@@ -40,6 +41,7 @@ function parseBody(b: any) {
     fields: {
       game_title,
       title_template,
+      text: String(b.text ?? '').trim(),
       description: String(b.description ?? ''),
       category_id: String(b.category_id ?? '20'),
       next_ep,
@@ -96,8 +98,8 @@ export async function presetRoutes(app: FastifyInstance) {
     const id = randomUUID()
     db.transaction(() => {
       db.prepare(
-        `insert into presets (id, account_id, game_title, title_template, description, category_id, next_ep, updated_at)
-         values (@id, @account_id, @game_title, @title_template, @description, @category_id, @next_ep, @updated_at)`,
+        `insert into presets (id, account_id, game_title, title_template, text, description, category_id, next_ep, updated_at)
+         values (@id, @account_id, @game_title, @title_template, @text, @description, @category_id, @next_ep, @updated_at)`,
       ).run({ ...fields, id, account_id: req.account.id })
       savePolls(id, polls)
     })()
@@ -110,7 +112,7 @@ export async function presetRoutes(app: FastifyInstance) {
     const { fields, polls } = parseBody(req.body)
     db.transaction(() => {
       db.prepare(
-        `update presets set game_title = @game_title, title_template = @title_template, description = @description,
+        `update presets set game_title = @game_title, title_template = @title_template, text = @text, description = @description,
          category_id = @category_id, next_ep = @next_ep, updated_at = @updated_at where id = @id`,
       ).run({ ...fields, id })
       savePolls(id, polls)

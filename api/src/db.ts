@@ -26,6 +26,7 @@ db.exec(`
     account_id text not null references accounts(id) on delete cascade,
     game_title text not null,
     title_template text not null default '{game}',
+    text text not null default '',
     description text not null default '',
     category_id text not null default '20',
     next_ep integer not null default 1,
@@ -43,6 +44,12 @@ db.exec(`
     sort integer not null default 0
   );
 `)
+
+// ฐานข้อมูลที่สร้างก่อนมีคอลัมน์ text
+const presetColumns = db.pragma('table_info(presets)') as { name: string }[]
+if (!presetColumns.some((c) => c.name === 'text')) {
+  db.exec(`alter table presets add column text text not null default ''`)
+}
 
 export class HttpError extends Error {
   constructor(

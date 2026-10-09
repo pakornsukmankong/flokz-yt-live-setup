@@ -115,17 +115,6 @@ label {
   font-weight: 600;
 }
 
-label.inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  flex: 0;
-}
-
-label.inline input {
-  width: 80px;
-}
-
 input,
 select,
 textarea {

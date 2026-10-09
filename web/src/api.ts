@@ -4,6 +4,7 @@ export type Preset = {
   id: string
   game_title: string
   title_template: string
+  text: string
   description: string
   category_id: string
   next_ep: number
@@ -35,7 +36,6 @@ export async function api<T>(path: string, opts: { method?: string; json?: unkno
   return data as T
 }
 
-export function renderTemplate(tpl: string, game: string, ep: number): string {
-  const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok' }).format(new Date())
-  return tpl.replaceAll('{game}', game).replaceAll('{ep}', String(ep)).replaceAll('{date}', date)
+export function renderTemplate(tpl: string, p: { game_title: string; next_ep: number; text: string }): string {
+  return tpl.replaceAll('{game}', p.game_title).replaceAll('{ep}', String(p.next_ep)).replaceAll('{text}', p.text)
 }
