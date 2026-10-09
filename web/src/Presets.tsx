@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, renderTemplate, type Category, type Poll, type Preset } from './api'
-import { exportBackup, importBackup } from './backup'
 import { fitThumbnail } from './image'
 import { toast } from './toast'
 
@@ -146,36 +145,6 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
     }
   }
 
-  const importInput = useRef<HTMLInputElement>(null)
-
-  const backup = async () => {
-    setBusy(true)
-    try {
-      await exportBackup(presets)
-      toast.success(`สำรอง ${presets.length} preset ลงไฟล์แล้ว`)
-    } catch (err) {
-      toast.error(`สำรองข้อมูลไม่สำเร็จ: ${(err as Error).message}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const restore = async (backupFile: File) => {
-    setBusy(true)
-    try {
-      const res = await importBackup(backupFile, presets)
-      await reloadPresets()
-      toast.success(
-        `นำเข้า ${res.added} preset` + (res.skipped.length ? ` ข้าม ${res.skipped.length} รายการที่มีชื่อเกมนี้อยู่แล้ว` : ''),
-      )
-      res.failed.forEach((f) => toast.error(`นำเข้าไม่สำเร็จ: ${f}`))
-    } catch (err) {
-      toast.error(`นำเข้าไม่สำเร็จ: ${(err as Error).message}`)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const current = presets.find((p) => p.id === draft?.id)
   const preview = file ? URL.createObjectURL(file) : current?.thumbnail_url
 
@@ -191,25 +160,6 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
           </button>
         ))}
         {!presets.length && <p className="muted">ยังไม่มี preset</p>}
-        <div className="row backup">
-          <button className="btn" disabled={busy || !presets.length} onClick={backup}>
-            สำรองข้อมูล
-          </button>
-          <button className="btn" disabled={busy} onClick={() => importInput.current?.click()}>
-            นำเข้า
-          </button>
-          <input
-            ref={importInput}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ''
-              if (f) restore(f)
-            }}
-          />
-        </div>
       </aside>
 
       {draft && (

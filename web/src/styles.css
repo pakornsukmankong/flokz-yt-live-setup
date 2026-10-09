@@ -164,17 +164,6 @@ main {
   align-items: center;
 }
 
-.backup {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.backup .btn {
-  flex: 1;
-  padding-inline: 8px;
-}
-
 .row > label,
 .row > input {
   flex: 1;
