@@ -27,6 +27,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
 
   const preset = presets.find((p) => p.id === presetId)
   const broadcast = broadcasts?.find((b) => b.id === broadcastId)
+  const liveUrl = broadcast ? `https://youtu.be/${broadcast.id}` : ''
 
   const loadBroadcasts = useCallback(async () => {
     setLoadError('')
@@ -111,6 +112,24 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
             {b.title}
           </label>
         ))}
+        {broadcast && (
+          <div className="row between url">
+            <a href={liveUrl} target="_blank" rel="noreferrer">
+              {liveUrl}
+            </a>
+            <button
+              className="btn"
+              onClick={() =>
+                navigator.clipboard.writeText(liveUrl).then(
+                  () => toast.success('copy ลิงก์ไลฟ์แล้ว'),
+                  () => toast.error('copy ไม่สำเร็จ'),
+                )
+              }
+            >
+              copy ลิงก์
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="card">

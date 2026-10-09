@@ -365,6 +365,19 @@ input[type='file']::file-selector-button {
   margin-bottom: 8px;
 }
 
+.url {
+  padding: 8px 8px 8px 14px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.url a {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-underline-offset: 3px;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
