@@ -4,14 +4,10 @@
 
 - `web/` — React + Vite (deploy บน Vercel)
 - `api/` — Fastify (deploy บน Railway)
-- `supabase/schema.sql` — ตารางและ bucket เก็บภาพปก (Supabase)
 
-## 1. Supabase
+ข้อมูลเก็บใน SQLite และภาพปกเก็บเป็นไฟล์ ทั้งคู่อยู่ในโฟลเดอร์ `DATA_DIR` ของ api (ตารางถูกสร้างเองตอน start)
 
-1. สร้างโปรเจกต์ แล้วเปิด SQL Editor รัน `supabase/schema.sql`
-2. ไปที่ Project Settings > API จด `Project URL` และ `service_role` key (หรือ secret key)
-
-## 2. Google Cloud
+## 1. Google Cloud
 
 1. สร้างโปรเจกต์ที่ https://console.cloud.google.com แล้ว Enable **YouTube Data API v3**
 2. ตั้ง OAuth consent screen แบบ External และเพิ่มอีเมลตัวเองใน Test users
@@ -20,7 +16,7 @@
    - `http://localhost:5173/api/auth/callback`
    - `https://<โดเมน-vercel>/api/auth/callback`
 
-## 3. รันบนเครื่อง
+## 2. รันบนเครื่อง
 
 ```bash
 cd api
@@ -37,13 +33,14 @@ npm run dev
 
 เปิด http://localhost:5173
 
-## 4. Deploy
+## 3. Deploy
 
 push โฟลเดอร์นี้ขึ้น GitHub ก่อน แล้ว:
 
 **Railway (api)**
 - New Project > Deploy from GitHub repo, ตั้ง Root Directory เป็น `api`
-- ใส่ Variables ตาม `api/.env.example` โดย `PUBLIC_URL` คือโดเมน Vercel (เช่น `https://xxx.vercel.app`) และไม่ต้องใส่ `PORT`
+- ใส่ Variables ตาม `api/.env.example` โดย `PUBLIC_URL` คือโดเมน Vercel (เช่น `https://xxx.vercel.app`) และไม่ต้องใส่ `PORT` กับ `DATA_DIR`
+- คลิกขวาที่ service > Attach Volume ตั้ง Mount Path เป็น `/data` (ถ้าไม่ผูก api จะไม่ยอม start เพราะข้อมูลจะหายทุกครั้งที่ deploy)
 - Settings > Networking > Generate Domain
 
 **Vercel (web)**

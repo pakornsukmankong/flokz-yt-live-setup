@@ -85,7 +85,7 @@ export async function yt(
   return parse(res)
 }
 
-export async function setThumbnail(account: Account, videoId: string, bytes: ArrayBuffer, contentType: string) {
+export async function setThumbnail(account: Account, videoId: string, bytes: Uint8Array<ArrayBuffer>, contentType: string) {
   const q = new URLSearchParams({ videoId, uploadType: 'media' })
   const res = await fetch(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?${q}`, {
     method: 'POST',

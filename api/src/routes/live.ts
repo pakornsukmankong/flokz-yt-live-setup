@@ -1,6 +1,8 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { config } from '../config.js'
-import { HttpError, must, supabase, THUMBNAIL_BUCKET, type Account } from '../db.js'
+import { db, HttpError, THUMBNAIL_DIR, type Account } from '../db.js'
 import { setThumbnail, yt } from '../google.js'
 import { getPreset, type Preset } from './presets.js'
 
@@ -47,7 +49,7 @@ export async function liveRoutes(app: FastifyInstance) {
   app.post('/api/live/apply', async (req) => {
     const { presetId, broadcastId, ep: epIn } = req.body as { presetId: string; broadcastId: string; ep?: number }
     if (!presetId || !broadcastId) throw new HttpError(400, 'ต้องเลือก preset และไลฟ์')
-    const preset = await getPreset(req.account, presetId)
+    const preset = getPreset(req.account, presetId)
     const ep = Number.isInteger(epIn) && epIn! > 0 ? epIn! : preset.next_ep
 
     const title = render(preset.title_template, preset, ep)
@@ -71,17 +73,16 @@ export async function liveRoutes(app: FastifyInstance) {
     const warnings: string[] = []
     if (preset.thumbnail_path) {
       try {
-        const dl = await supabase.storage.from(THUMBNAIL_BUCKET).download(preset.thumbnail_path)
-        if (dl.error) throw new Error(dl.error.message)
+        const bytes = await readFile(join(THUMBNAIL_DIR, preset.thumbnail_path))
         const type = preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg'
-        await setThumbnail(req.account, broadcastId, await dl.data.arrayBuffer(), type)
+        await setThumbnail(req.account, broadcastId, bytes, type)
       } catch (err) {
         warnings.push(`ตั้งภาพปกไม่สำเร็จ: ${(err as Error).message}`)
       }
     }
 
     if (preset.title_template.includes('{ep}')) {
-      must(await supabase.from('presets').update({ next_ep: ep + 1 }).eq('id', preset.id))
+      db.prepare('update presets set next_ep = ? where id = ?').run(ep + 1, preset.id)
     }
 
     return {
@@ -94,7 +95,7 @@ export async function liveRoutes(app: FastifyInstance) {
 
   app.post('/api/live/poll', async (req) => {
     const { presetId, pollId, broadcastId } = req.body as { presetId: string; pollId: string; broadcastId: string }
-    const preset = await getPreset(req.account, presetId)
+    const preset = getPreset(req.account, presetId)
     const poll = preset.preset_polls.find((p) => p.id === pollId)
     if (!poll) throw new HttpError(404, 'ไม่พบ poll นี้ใน preset')
 

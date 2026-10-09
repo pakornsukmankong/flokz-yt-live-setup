@@ -1,5 +1,8 @@
+import { randomUUID } from 'node:crypto'
+import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
-import { HttpError, must, supabase, THUMBNAIL_BUCKET, type Account } from '../db.js'
+import { db, HttpError, THUMBNAIL_DIR, type Account } from '../db.js'
 
 export type Preset = {
   id: string
@@ -10,6 +13,7 @@ export type Preset = {
   category_id: string
   next_ep: number
   thumbnail_path: string | null
+  updated_at: string
   preset_polls: { id: string; question: string; options: string[]; sort: number }[]
 }
 
@@ -45,87 +49,117 @@ function parseBody(b: any) {
   }
 }
 
-async function savePolls(presetId: string, polls: { question: string; options: string[] }[]) {
-  must(await supabase.from('preset_polls').delete().eq('preset_id', presetId))
-  if (polls.length) {
-    must(await supabase.from('preset_polls').insert(polls.map((p, sort) => ({ ...p, preset_id: presetId, sort }))))
-  }
+function savePolls(presetId: string, polls: { question: string; options: string[] }[]) {
+  db.prepare('delete from preset_polls where preset_id = ?').run(presetId)
+  const insert = db.prepare('insert into preset_polls (id, preset_id, question, options, sort) values (?, ?, ?, ?, ?)')
+  polls.forEach((p, sort) => insert.run(randomUUID(), presetId, p.question, JSON.stringify(p.options), sort))
 }
 
-async function toResponse(p: Preset) {
-  let thumbnail_url: string | null = null
-  if (p.thumbnail_path) {
-    const { data } = await supabase.storage.from(THUMBNAIL_BUCKET).createSignedUrl(p.thumbnail_path, 3600)
-    thumbnail_url = data?.signedUrl ?? null
-  }
+function withPolls(row: Omit<Preset, 'preset_polls'>): Preset {
+  const polls = db.prepare('select * from preset_polls where preset_id = ? order by sort').all(row.id) as {
+    id: string
+    question: string
+    options: string
+    sort: number
+  }[]
+  return { ...row, preset_polls: polls.map((p) => ({ ...p, options: JSON.parse(p.options) as string[] })) }
+}
+
+function toResponse(p: Preset) {
   const { preset_polls, account_id, thumbnail_path, ...rest } = p
   return {
     ...rest,
-    thumbnail_url,
-    polls: [...preset_polls].sort((a, b) => a.sort - b.sort).map(({ id, question, options }) => ({ id, question, options })),
+    // ?v= เปลี่ยนทุกครั้งที่อัปโหลดภาพใหม่ เบราว์เซอร์จึงไม่ใช้ภาพเก่าจาก cache
+    thumbnail_url: thumbnail_path ? `/api/presets/${p.id}/thumbnail?v=${Date.parse(p.updated_at)}` : null,
+    polls: preset_polls.map(({ id, question, options }) => ({ id, question, options })),
   }
 }
 
-export async function getPreset(account: Account, id: string): Promise<Preset> {
-  const preset = must(
-    await supabase.from('presets').select('*, preset_polls(*)').eq('id', id).eq('account_id', account.id).maybeSingle(),
-  )
-  if (!preset) throw new HttpError(404, 'ไม่พบ preset นี้')
-  return preset as Preset
+export function getPreset(account: Account, id: string): Preset {
+  const row = db.prepare('select * from presets where id = ? and account_id = ?').get(id, account.id) as
+    | Omit<Preset, 'preset_polls'>
+    | undefined
+  if (!row) throw new HttpError(404, 'ไม่พบ preset นี้')
+  return withPolls(row)
 }
 
 export async function presetRoutes(app: FastifyInstance) {
   app.get('/api/presets', async (req) => {
-    const rows = must(
-      await supabase.from('presets').select('*, preset_polls(*)').eq('account_id', req.account.id).order('game_title'),
-    ) as Preset[]
-    return Promise.all(rows.map(toResponse))
+    const rows = db
+      .prepare('select * from presets where account_id = ? order by game_title collate nocase')
+      .all(req.account.id) as Omit<Preset, 'preset_polls'>[]
+    return rows.map((r) => toResponse(withPolls(r)))
   })
 
   app.post('/api/presets', async (req) => {
     const { fields, polls } = parseBody(req.body)
-    const row = must(
-      await supabase.from('presets').insert({ ...fields, account_id: req.account.id }).select('id').single(),
-    ) as { id: string }
-    await savePolls(row.id, polls)
-    return toResponse(await getPreset(req.account, row.id))
+    const id = randomUUID()
+    db.transaction(() => {
+      db.prepare(
+        `insert into presets (id, account_id, game_title, title_template, description, category_id, next_ep, updated_at)
+         values (@id, @account_id, @game_title, @title_template, @description, @category_id, @next_ep, @updated_at)`,
+      ).run({ ...fields, id, account_id: req.account.id })
+      savePolls(id, polls)
+    })()
+    return toResponse(getPreset(req.account, id))
   })
 
   app.put('/api/presets/:id', async (req) => {
     const { id } = req.params as { id: string }
-    await getPreset(req.account, id)
+    getPreset(req.account, id)
     const { fields, polls } = parseBody(req.body)
-    must(await supabase.from('presets').update(fields).eq('id', id))
-    await savePolls(id, polls)
-    return toResponse(await getPreset(req.account, id))
+    db.transaction(() => {
+      db.prepare(
+        `update presets set game_title = @game_title, title_template = @title_template, description = @description,
+         category_id = @category_id, next_ep = @next_ep, updated_at = @updated_at where id = @id`,
+      ).run({ ...fields, id })
+      savePolls(id, polls)
+    })()
+    return toResponse(getPreset(req.account, id))
   })
 
   app.delete('/api/presets/:id', async (req) => {
     const { id } = req.params as { id: string }
-    const preset = await getPreset(req.account, id)
-    if (preset.thumbnail_path) await supabase.storage.from(THUMBNAIL_BUCKET).remove([preset.thumbnail_path])
-    must(await supabase.from('presets').delete().eq('id', id))
+    const preset = getPreset(req.account, id)
+    db.prepare('delete from presets where id = ?').run(id)
+    if (preset.thumbnail_path) await rm(join(THUMBNAIL_DIR, preset.thumbnail_path), { force: true })
     return { ok: true }
+  })
+
+  app.get('/api/presets/:id/thumbnail', async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const preset = getPreset(req.account, id)
+    if (!preset.thumbnail_path) throw new HttpError(404, 'preset นี้ยังไม่มีภาพปก')
+    const bytes = await readFile(join(THUMBNAIL_DIR, preset.thumbnail_path)).catch(() => null)
+    if (!bytes) throw new HttpError(404, 'ไม่พบไฟล์ภาพปก')
+    return reply
+      .type(preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg')
+      .header('Cache-Control', 'private, max-age=3600')
+      .send(bytes)
   })
 
   app.post('/api/presets/:id/thumbnail', async (req) => {
     const { id } = req.params as { id: string }
-    const preset = await getPreset(req.account, id)
+    const preset = getPreset(req.account, id)
     const file = await req.file()
     if (!file) throw new HttpError(400, 'ไม่พบไฟล์ภาพ')
     const ext = IMAGE_EXT[file.mimetype]
     if (!ext) throw new HttpError(400, 'ภาพปกต้องเป็น JPG หรือ PNG')
     const buf = await file.toBuffer() // เกิน 2MB จะ throw 413 จาก limit ใน server.ts
 
-    const path = `${req.account.id}/${id}.${ext}`
-    const up = await supabase.storage
-      .from(THUMBNAIL_BUCKET)
-      .upload(path, buf, { contentType: file.mimetype, upsert: true })
-    if (up.error) throw new HttpError(500, `Storage: ${up.error.message}`)
+    // เขียนไฟล์ชั่วคราวแล้ว rename ทับ ภาพเดิมจึงไม่เสียถ้าเขียนไม่สำเร็จ
+    const path = `${id}.${ext}`
+    const tmp = join(THUMBNAIL_DIR, `${id}.tmp`)
+    await writeFile(tmp, buf)
+    await rename(tmp, join(THUMBNAIL_DIR, path))
     if (preset.thumbnail_path && preset.thumbnail_path !== path) {
-      await supabase.storage.from(THUMBNAIL_BUCKET).remove([preset.thumbnail_path])
+      await rm(join(THUMBNAIL_DIR, preset.thumbnail_path), { force: true })
     }
-    must(await supabase.from('presets').update({ thumbnail_path: path }).eq('id', id))
-    return toResponse(await getPreset(req.account, id))
+    db.prepare('update presets set thumbnail_path = ?, updated_at = ? where id = ?').run(
+      path,
+      new Date().toISOString(),
+      id,
+    )
+    return toResponse(getPreset(req.account, id))
   })
 }

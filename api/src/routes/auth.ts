@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { config } from '../config.js'
 import { encrypt } from '../crypto.js'
-import { HttpError, must, supabase, type Account } from '../db.js'
+import { db, HttpError, type Account } from '../db.js'
 import { authUrl, cacheAccessToken, exchangeCode, yt } from '../google.js'
 
 const cookieOpts = {
@@ -17,9 +17,9 @@ export async function requireAccount(req: FastifyRequest) {
   const raw = req.cookies.sid
   const sid = raw ? req.unsignCookie(raw) : null
   if (!sid?.valid || !sid.value) throw new HttpError(401, 'ยังไม่ได้เข้าสู่ระบบ')
-  const account = must(await supabase.from('accounts').select('*').eq('id', sid.value).maybeSingle())
+  const account = db.prepare('select * from accounts where id = ?').get(sid.value) as Account | undefined
   if (!account) throw new HttpError(401, 'ยังไม่ได้เข้าสู่ระบบ')
-  req.account = account as Account
+  req.account = account
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -48,26 +48,24 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.redirect('/?login_error=not_allowed')
     }
 
-    const account = must(
-      await supabase
-        .from('accounts')
-        .upsert(
-          { google_sub: claims.sub, email, refresh_token_enc: encrypt(t.refresh_token) },
-          { onConflict: 'google_sub' },
-        )
-        .select()
-        .single(),
-    ) as Account
+    const account = db
+      .prepare(
+        `insert into accounts (id, google_sub, email, refresh_token_enc) values (?, ?, ?, ?)
+         on conflict (google_sub) do update set email = excluded.email, refresh_token_enc = excluded.refresh_token_enc
+         returning *`,
+      )
+      .get(randomUUID(), claims.sub, email, encrypt(t.refresh_token)) as Account
     cacheAccessToken(account.id, t.access_token, t.expires_in)
 
     try {
       const ch = await yt(account, 'GET', '/channels', { query: { part: 'snippet', mine: 'true' } })
       const item = ch.items?.[0]
       if (item) {
-        await supabase
-          .from('accounts')
-          .update({ channel_id: item.id, channel_title: item.snippet.title })
-          .eq('id', account.id)
+        db.prepare('update accounts set channel_id = ?, channel_title = ? where id = ?').run(
+          item.id,
+          item.snippet.title,
+          account.id,
+        )
       }
     } catch (err) {
       req.log.warn(err, 'could not load channel info')
