@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR-RAILWAY-DOMAIN.up.railway.app/api/:path*"
+      "destination": "https://flokz-yt-live-setup-production.up.railway.app/api/:path*"
     }
   ]
 }
