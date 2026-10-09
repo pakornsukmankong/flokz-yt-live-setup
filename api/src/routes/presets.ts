@@ -164,6 +164,15 @@ export async function presetRoutes(app: FastifyInstance) {
     if (!preset.thumbnail_path) throw new HttpError(404, 'preset นี้ยังไม่มีภาพปก')
     const bytes = await readFile(join(THUMBNAIL_DIR, preset.thumbnail_path)).catch(() => null)
     if (!bytes) throw new HttpError(404, 'ไม่พบไฟล์ภาพปก')
+    // ?download=1 ให้เบราว์เซอร์บันทึกเป็นไฟล์ชื่อตามเกม แทนที่จะเปิดแสดง
+    if ((req.query as { download?: string }).download) {
+      const ext = preset.thumbnail_path.split('.').pop()
+      const name = `${preset.game_title.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`
+      reply.header(
+        'Content-Disposition',
+        `attachment; filename="thumbnail.${ext}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      )
+    }
     return reply
       .type(preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg')
       .header('Cache-Control', 'private, max-age=3600')

@@ -220,6 +220,13 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
             <input type="file" accept="image/jpeg,image/png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
           {preview && <img className="thumb" src={preview} alt="ภาพปก" />}
+          {!file && current?.thumbnail_url && (
+            <div>
+              <a className="btn" href={`${current.thumbnail_url}&download=1`}>
+                ดาวน์โหลดภาพปก
+              </a>
+            </div>
+          )}
 
           <h3>Poll</h3>
           {draft.polls.map((poll, i) => (
