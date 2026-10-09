@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, renderTemplate, type Category, type Poll, type Preset } from './api'
+import { fitThumbnail } from './image'
 
 type Draft = {
   id?: string
@@ -58,7 +59,7 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
       })
       if (file) {
         const form = new FormData()
-        form.append('file', file)
+        form.append('file', await fitThumbnail(file))
         await api(`/presets/${saved.id}/thumbnail`, { form })
       }
       await reloadPresets()
@@ -138,7 +139,7 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
             <textarea rows={6} value={draft.description} onChange={(e) => set({ description: e.target.value })} />
           </label>
           <label>
-            ภาพปก <span className="muted">JPG/PNG ไม่เกิน 2MB</span>
+            ภาพปก <span className="muted">JPG/PNG ถ้าเกิน 2MB จะย่อให้อัตโนมัติ</span>
             <input type="file" accept="image/jpeg,image/png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </label>
           {preview && <img className="thumb" src={preview} alt="ภาพปก" />}
