@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, renderTemplate, type Broadcast, type Preset } from './api'
+import { toast } from './toast'
 
 type ApplyResult = { title: string; warnings: string[]; gameTitle: string; studioUrl: string }
 type ActivePoll = { messageId: string; question: string }
@@ -36,6 +37,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
       setBroadcastId((cur) => (list.some((b) => b.id === cur) ? cur : (list[0]?.id ?? '')))
     } catch (err) {
       setError((err as Error).message)
+      toast.error(`โหลดรายการไลฟ์ไม่สำเร็จ: ${(err as Error).message}`)
     }
   }, [])
 
@@ -60,6 +62,7 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
       await fn()
     } catch (err) {
       setError((err as Error).message)
+      toast.error((err as Error).message)
     } finally {
       setBusy(false)
     }
@@ -68,19 +71,25 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
   const apply = () =>
     run(async () => {
       setResult(null)
-      setResult(await api<ApplyResult>('/live/apply', { json: { presetId, broadcastId, ep } }))
+      const res = await api<ApplyResult>('/live/apply', { json: { presetId, broadcastId, ep } })
+      setResult(res)
+      toast.success(`อัปเดตไลฟ์แล้ว: ${res.title}`)
+      res.warnings.forEach(toast.error)
       await Promise.all([reloadPresets(), loadBroadcasts()])
     })
 
   const firePoll = (pollId: string) =>
     run(async () => {
-      savePoll(await api<ActivePoll>('/live/poll', { json: { presetId, pollId, broadcastId } }))
+      const poll = await api<ActivePoll>('/live/poll', { json: { presetId, pollId, broadcastId } })
+      savePoll(poll)
+      toast.success(`ยิง poll แล้ว: ${poll.question}`)
     })
 
   const closePoll = () =>
     run(async () => {
       await api('/live/poll/close', { json: { messageId: activePoll!.messageId } })
       savePoll(null)
+      toast.success('ปิด poll แล้ว')
     })
 
   return (
@@ -150,7 +159,13 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
             ))}
             <p>
               ชื่อเกมต้องเลือกเองใน Studio:{' '}
-              <button className="btn" onClick={() => navigator.clipboard.writeText(result.gameTitle)}>
+              <button className="btn" onClick={() =>
+                  navigator.clipboard.writeText(result.gameTitle).then(
+                    () => toast.success(`copy "${result.gameTitle}" แล้ว`),
+                    () => toast.error('copy ไม่สำเร็จ'),
+                  )
+                }
+              >
                 copy "{result.gameTitle}"
               </button>{' '}
               <a className="btn" href={result.studioUrl} target="_blank" rel="noreferrer">

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, renderTemplate, type Category, type Poll, type Preset } from './api'
 import { fitThumbnail } from './image'
+import { toast } from './toast'
 
 type Draft = {
   id?: string
@@ -64,8 +65,10 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
       }
       await reloadPresets()
       open(toDraft(saved))
+      toast.success(`บันทึก preset "${saved.game_title}" แล้ว`)
     } catch (err) {
       setError((err as Error).message)
+      toast.error(`บันทึกไม่สำเร็จ: ${(err as Error).message}`)
     } finally {
       setBusy(false)
     }
@@ -78,8 +81,10 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
       await api(`/presets/${draft.id}`, { method: 'DELETE' })
       await reloadPresets()
       setDraft(null)
+      toast.success(`ลบ preset "${draft.game_title}" แล้ว`)
     } catch (err) {
       setError((err as Error).message)
+      toast.error(`ลบไม่สำเร็จ: ${(err as Error).message}`)
     } finally {
       setBusy(false)
     }

@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { config } from '../config.js'
 import { encrypt } from '../crypto.js'
 import { db, HttpError, type Account } from '../db.js'
-import { authUrl, cacheAccessToken, exchangeCode, yt } from '../google.js'
+import { authUrl, cacheAccessToken, exchangeCode, YOUTUBE_SCOPE, yt } from '../google.js'
 
 const cookieOpts = {
   path: '/',
@@ -46,6 +46,11 @@ export async function authRoutes(app: FastifyInstance) {
     const email = String(claims.email ?? '').toLowerCase()
     if (!claims.email_verified || !config.allowedEmails.includes(email)) {
       return reply.redirect('/?login_error=not_allowed')
+    }
+    // หน้าขอสิทธิ์ของ Google ให้ผู้ใช้เลือกติ๊กทีละสิทธิ์ได้ ถ้าไม่ติ๊ก YouTube จะเรียก API ไม่ได้เลย
+    if (!t.scope?.split(' ').includes(YOUTUBE_SCOPE)) {
+      reply.clearCookie('sid', { path: '/' })
+      return reply.redirect('/?login_error=missing_scope')
     }
 
     const account = db

@@ -4,7 +4,8 @@ import { HttpError, type Account } from './db.js'
 
 const YT = 'https://www.googleapis.com/youtube/v3'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
-const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/youtube.force-ssl']
+export const YOUTUBE_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl'
+const SCOPES = ['openid', 'email', YOUTUBE_SCOPE]
 
 export const redirectUri = `${config.publicUrl}/api/auth/callback`
 
@@ -34,7 +35,7 @@ async function tokenRequest(params: Record<string, string>) {
   if (!res.ok) {
     throw new HttpError(401, `Google login ล้มเหลว (${data.error ?? res.status}) กรุณา login ใหม่`)
   }
-  return data as { access_token: string; expires_in: number; refresh_token?: string; id_token?: string }
+  return data as { access_token: string; expires_in: number; refresh_token?: string; id_token?: string; scope?: string }
 }
 
 export function exchangeCode(code: string) {

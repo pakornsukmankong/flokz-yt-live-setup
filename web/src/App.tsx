@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError, type Me, type Preset } from './api'
 import { Live } from './Live'
 import { Presets } from './Presets'
+import { Toasts } from './toast'
 
 const LOGIN_ERRORS: Record<string, string> = {
   not_allowed: 'อีเมลนี้ไม่ได้รับอนุญาตให้ใช้งาน',
   cancelled: 'ยกเลิกการ login',
+  missing_scope: 'ยังไม่ได้อนุญาตสิทธิ์จัดการ YouTube กรุณา login ใหม่แล้วติ๊กช่องสิทธิ์ YouTube ในหน้าของ Google',
 }
 
 export function App() {
@@ -75,6 +77,7 @@ export function App() {
           <Presets presets={presets} reloadPresets={reloadPresets} />
         )}
       </main>
+      <Toasts />
     </div>
   )
 }
