@@ -12,6 +12,7 @@ type Draft = {
   category_id: string
   next_ep: number
   polls: Poll[]
+  messages: string[]
 }
 
 const EMPTY: Draft = {
@@ -22,11 +23,16 @@ const EMPTY: Draft = {
   category_id: '20',
   next_ep: 1,
   polls: [],
+  messages: [],
 }
 
 function toDraft(p: Preset): Draft {
   const { thumbnail_url, ...rest } = p
-  return { ...rest, polls: p.polls.map((x) => ({ question: x.question, options: [...x.options] })) }
+  return {
+    ...rest,
+    polls: p.polls.map((x) => ({ question: x.question, options: [...x.options] })),
+    messages: p.messages.map((m) => m.text),
+  }
 }
 
 export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadPresets: () => Promise<void> }) {
@@ -114,6 +120,7 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
       description: src.description,
       category_id: src.category_id,
       polls: src.polls.map((x) => ({ question: x.question, options: [...x.options] })),
+      messages: src.messages.map((m) => m.text),
     })
     setFile(null)
     if (src.thumbnail_url) {
@@ -227,6 +234,25 @@ export function Presets({ presets, reloadPresets }: { presets: Preset[]; reloadP
               </a>
             </div>
           )}
+
+          <h3>ข้อความแชต</h3>
+          <p className="muted">ข้อความที่กดส่งลงแชตไลฟ์ได้จากแท็บไลฟ์ เช่น ลิงก์ donate หรือกติกา (ไม่เกิน 200 ตัวอักษร)</p>
+          {draft.messages.map((m, i) => (
+            <div key={i} className="row">
+              <input
+                placeholder="ข้อความ"
+                maxLength={200}
+                value={m}
+                onChange={(e) => set({ messages: draft.messages.map((x, j) => (j === i ? e.target.value : x)) })}
+              />
+              <button className="btn" onClick={() => set({ messages: draft.messages.filter((_, j) => j !== i) })}>
+                ลบ
+              </button>
+            </div>
+          ))}
+          <button className="btn" onClick={() => set({ messages: [...draft.messages, ''] })}>
+            + เพิ่มข้อความแชต
+          </button>
 
           <h3>Poll</h3>
           {draft.polls.map((poll, i) => (

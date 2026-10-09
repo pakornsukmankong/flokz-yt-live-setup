@@ -22,6 +22,13 @@ async function listBroadcasts(account: Account, broadcastStatus: 'active' | 'upc
   }))
 }
 
+async function liveChatId(account: Account, broadcastId: string): Promise<string> {
+  const b = await yt(account, 'GET', '/liveBroadcasts', { query: { part: 'snippet', id: broadcastId } })
+  const id = b.items?.[0]?.snippet?.liveChatId
+  if (!id) throw new HttpError(400, 'ไลฟ์นี้ไม่มีแชตที่เปิดอยู่')
+  return id
+}
+
 let categoryCache: { id: string; title: string }[] | null = null
 
 export async function liveRoutes(app: FastifyInstance) {
@@ -98,15 +105,11 @@ export async function liveRoutes(app: FastifyInstance) {
     const poll = preset.preset_polls.find((p) => p.id === pollId)
     if (!poll) throw new HttpError(404, 'ไม่พบ poll นี้ใน preset')
 
-    const b = await yt(req.account, 'GET', '/liveBroadcasts', { query: { part: 'snippet', id: broadcastId } })
-    const liveChatId = b.items?.[0]?.snippet?.liveChatId
-    if (!liveChatId) throw new HttpError(400, 'ไลฟ์นี้ไม่มีแชตที่เปิดอยู่ จึงสร้าง poll ไม่ได้')
-
     const msg = await yt(req.account, 'POST', '/liveChat/messages', {
       query: { part: 'snippet' },
       body: {
         snippet: {
-          liveChatId,
+          liveChatId: await liveChatId(req.account, broadcastId),
           type: 'pollEvent',
           pollDetails: {
             metadata: {
@@ -118,6 +121,25 @@ export async function liveRoutes(app: FastifyInstance) {
       },
     })
     return { messageId: msg.id as string, question: poll.question }
+  })
+
+  app.post('/api/live/chat', async (req) => {
+    const { presetId, messageId, broadcastId } = req.body as { presetId: string; messageId: string; broadcastId: string }
+    const preset = getPreset(req.account, presetId)
+    const message = preset.preset_messages.find((m) => m.id === messageId)
+    if (!message) throw new HttpError(404, 'ไม่พบข้อความนี้ใน preset')
+
+    await yt(req.account, 'POST', '/liveChat/messages', {
+      query: { part: 'snippet' },
+      body: {
+        snippet: {
+          liveChatId: await liveChatId(req.account, broadcastId),
+          type: 'textMessageEvent',
+          textMessageDetails: { messageText: message.text },
+        },
+      },
+    })
+    return { text: message.text }
   })
 
   app.post('/api/live/poll/close', async (req) => {

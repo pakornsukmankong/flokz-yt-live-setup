@@ -16,7 +16,13 @@ export type Preset = {
   thumbnail_path: string | null
   updated_at: string
   preset_polls: { id: string; question: string; options: string[]; sort: number }[]
+  preset_messages: { id: string; text: string; sort: number }[]
 }
+
+type PresetRow = Omit<Preset, 'preset_polls' | 'preset_messages'>
+
+// YouTube จำกัดข้อความแชตไลฟ์ที่ 200 ตัวอักษร
+const MAX_CHAT_LENGTH = 200
 
 const IMAGE_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png' }
 
@@ -37,6 +43,15 @@ function parseBody(b: any) {
     }
   }
 
+  const messages: string[] = (Array.isArray(b.messages) ? b.messages : [])
+    .map((m: any) => String(m ?? '').trim())
+    .filter(Boolean)
+  for (const m of messages) {
+    if (m.length > MAX_CHAT_LENGTH) {
+      throw new HttpError(400, `ข้อความแชตยาว ${m.length} ตัวอักษร (YouTube จำกัด ${MAX_CHAT_LENGTH})`)
+    }
+  }
+
   return {
     fields: {
       game_title,
@@ -48,6 +63,7 @@ function parseBody(b: any) {
       updated_at: new Date().toISOString(),
     },
     polls,
+    messages,
   }
 }
 
@@ -57,44 +73,58 @@ function savePolls(presetId: string, polls: { question: string; options: string[
   polls.forEach((p, sort) => insert.run(randomUUID(), presetId, p.question, JSON.stringify(p.options), sort))
 }
 
-function withPolls(row: Omit<Preset, 'preset_polls'>): Preset {
+function saveMessages(presetId: string, messages: string[]) {
+  db.prepare('delete from preset_messages where preset_id = ?').run(presetId)
+  const insert = db.prepare('insert into preset_messages (id, preset_id, text, sort) values (?, ?, ?, ?)')
+  messages.forEach((text, sort) => insert.run(randomUUID(), presetId, text, sort))
+}
+
+function withChildren(row: PresetRow): Preset {
   const polls = db.prepare('select * from preset_polls where preset_id = ? order by sort').all(row.id) as {
     id: string
     question: string
     options: string
     sort: number
   }[]
-  return { ...row, preset_polls: polls.map((p) => ({ ...p, options: JSON.parse(p.options) as string[] })) }
+  const preset_messages = db
+    .prepare('select * from preset_messages where preset_id = ? order by sort')
+    .all(row.id) as Preset['preset_messages']
+  return {
+    ...row,
+    preset_polls: polls.map((p) => ({ ...p, options: JSON.parse(p.options) as string[] })),
+    preset_messages,
+  }
 }
 
 function toResponse(p: Preset) {
-  const { preset_polls, account_id, thumbnail_path, ...rest } = p
+  const { preset_polls, preset_messages, account_id, thumbnail_path, ...rest } = p
   return {
     ...rest,
     // ?v= เปลี่ยนทุกครั้งที่อัปโหลดภาพใหม่ เบราว์เซอร์จึงไม่ใช้ภาพเก่าจาก cache
     thumbnail_url: thumbnail_path ? `/api/presets/${p.id}/thumbnail?v=${Date.parse(p.updated_at)}` : null,
     polls: preset_polls.map(({ id, question, options }) => ({ id, question, options })),
+    messages: preset_messages.map(({ id, text }) => ({ id, text })),
   }
 }
 
 export function getPreset(account: Account, id: string): Preset {
   const row = db.prepare('select * from presets where id = ? and account_id = ?').get(id, account.id) as
-    | Omit<Preset, 'preset_polls'>
+    | PresetRow
     | undefined
   if (!row) throw new HttpError(404, 'ไม่พบ preset นี้')
-  return withPolls(row)
+  return withChildren(row)
 }
 
 export async function presetRoutes(app: FastifyInstance) {
   app.get('/api/presets', async (req) => {
     const rows = db
       .prepare('select * from presets where account_id = ? order by game_title collate nocase')
-      .all(req.account.id) as Omit<Preset, 'preset_polls'>[]
-    return rows.map((r) => toResponse(withPolls(r)))
+      .all(req.account.id) as PresetRow[]
+    return rows.map((r) => toResponse(withChildren(r)))
   })
 
   app.post('/api/presets', async (req) => {
-    const { fields, polls } = parseBody(req.body)
+    const { fields, polls, messages } = parseBody(req.body)
     const id = randomUUID()
     db.transaction(() => {
       db.prepare(
@@ -102,6 +132,7 @@ export async function presetRoutes(app: FastifyInstance) {
          values (@id, @account_id, @game_title, @title_template, @text, @description, @category_id, @next_ep, @updated_at)`,
       ).run({ ...fields, id, account_id: req.account.id })
       savePolls(id, polls)
+      saveMessages(id, messages)
     })()
     return toResponse(getPreset(req.account, id))
   })
@@ -109,13 +140,14 @@ export async function presetRoutes(app: FastifyInstance) {
   app.put('/api/presets/:id', async (req) => {
     const { id } = req.params as { id: string }
     getPreset(req.account, id)
-    const { fields, polls } = parseBody(req.body)
+    const { fields, polls, messages } = parseBody(req.body)
     db.transaction(() => {
       db.prepare(
         `update presets set game_title = @game_title, title_template = @title_template, text = @text, description = @description,
          category_id = @category_id, next_ep = @next_ep, updated_at = @updated_at where id = @id`,
       ).run({ ...fields, id })
       savePolls(id, polls)
+      saveMessages(id, messages)
     })()
     return toResponse(getPreset(req.account, id))
   })
@@ -146,6 +178,10 @@ export async function presetRoutes(app: FastifyInstance) {
         thumbnail_path,
       })
       savePolls(copyId, src.preset_polls)
+      saveMessages(
+        copyId,
+        src.preset_messages.map((m) => m.text),
+      )
     })()
     return toResponse(getPreset(req.account, copyId))
   })
@@ -164,14 +200,22 @@ export async function presetRoutes(app: FastifyInstance) {
     if (!preset.thumbnail_path) throw new HttpError(404, 'preset นี้ยังไม่มีภาพปก')
     const bytes = await readFile(join(THUMBNAIL_DIR, preset.thumbnail_path)).catch(() => null)
     if (!bytes) throw new HttpError(404, 'ไม่พบไฟล์ภาพปก')
-    // ?download=1 ให้เบราว์เซอร์บันทึกเป็นไฟล์ชื่อตามเกม แทนที่จะเปิดแสดง
+    // ?download=1 ให้เบราว์เซอร์บันทึกเป็นไฟล์แทนที่จะเปิดแสดง ชื่อไฟล์ต่อท้ายด้วยเวลาที่กดเพื่อไม่ให้ซ้ำกัน
     if ((req.query as { download?: string }).download) {
       const ext = preset.thumbnail_path.split('.').pop()
-      const name = `${preset.game_title.replace(/[\\/:*?"<>|]/g, '_')}.${ext}`
-      reply.header(
-        'Content-Disposition',
-        `attachment; filename="thumbnail.${ext}"; filename*=UTF-8''${encodeURIComponent(name)}`,
-      )
+      const stamp = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Bangkok', dateStyle: 'short', timeStyle: 'medium' })
+        .format(new Date())
+        .replace(' ', '_')
+        .replaceAll(':', '')
+      const name = `${preset.game_title.replace(/[\\/:*?"<>|]/g, '_')}_${stamp}.${ext}`
+      return reply
+        .type(preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg')
+        .header(
+          'Content-Disposition',
+          `attachment; filename="thumbnail_${stamp}.${ext}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+        )
+        .header('Cache-Control', 'no-store')
+        .send(bytes)
     }
     return reply
       .type(preset.thumbnail_path.endsWith('.png') ? 'image/png' : 'image/jpeg')

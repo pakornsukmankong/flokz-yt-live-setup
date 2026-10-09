@@ -10,6 +10,7 @@ export type Preset = {
   next_ep: number
   thumbnail_url: string | null
   polls: Poll[]
+  messages: { id: string; text: string }[]
 }
 
 export type Broadcast = { id: string; title: string; status: 'active' | 'upcoming'; thumbnail: string | null }

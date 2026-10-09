@@ -445,6 +445,11 @@ input[type='file']::file-selector-button {
   margin-bottom: 0;
 }
 
+.pre-line {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
 .muted {
   color: var(--muted);
   font-weight: 300;

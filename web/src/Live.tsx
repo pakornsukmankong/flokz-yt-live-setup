@@ -82,6 +82,12 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
       toast.success(`ยิง poll แล้ว: ${poll.question}`)
     })
 
+  const sendChat = (messageId: string) =>
+    run(async () => {
+      const res = await api<{ text: string }>('/live/chat', { json: { presetId, messageId, broadcastId } })
+      toast.success(`ส่งลงแชตแล้ว: ${res.text}`)
+    })
+
   const closePoll = () =>
     run(async () => {
       await api('/live/poll/close', { json: { messageId: activePoll!.messageId } })
@@ -155,6 +161,11 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
               <button className="btn primary" disabled={busy || !broadcastId} onClick={apply}>
                 {busy ? 'กำลังทำงาน…' : 'Apply ไปที่ YouTube'}
               </button>
+              {preset.thumbnail_url && (
+                <a className="btn" href={`${preset.thumbnail_url}&download=1`}>
+                  ดาวน์โหลดภาพปก
+                </a>
+              )}
             </div>
           </>
         )}
@@ -186,9 +197,23 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
         )}
       </section>
 
+      {preset && preset.messages.length > 0 && (
+        <section className="card">
+          <h3>3. ข้อความแชต</h3>
+          {preset.messages.map((m) => (
+            <div key={m.id} className="row between poll">
+              <span className="pre-line">{m.text}</span>
+              <button className="btn primary" disabled={busy || !broadcastId} onClick={() => sendChat(m.id)}>
+                ส่ง
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
       {preset && preset.polls.length > 0 && (
         <section className="card">
-          <h3>3. Poll</h3>
+          <h3>{preset.messages.length > 0 ? 4 : 3}. Poll</h3>
           {broadcast?.status !== 'active' && <p className="muted">ยิง poll ได้เมื่อไลฟ์ออนอยู่เท่านั้น</p>}
           {activePoll && (
             <div className="row between success">

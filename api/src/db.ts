@@ -43,6 +43,13 @@ db.exec(`
     options text not null,
     sort integer not null default 0
   );
+
+  create table if not exists preset_messages (
+    id text primary key,
+    preset_id text not null references presets(id) on delete cascade,
+    text text not null,
+    sort integer not null default 0
+  );
 `)
 
 // ฐานข้อมูลที่สร้างก่อนมีคอลัมน์ text
