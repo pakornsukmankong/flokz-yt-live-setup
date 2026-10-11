@@ -6,6 +6,7 @@ type ApplyResult = { title: string; warnings: string[]; gameTitle: string; studi
 type ActivePoll = { messageId: string; question: string }
 
 const POLL_KEY = 'activePoll'
+const FACEBOOK_PAGE_URL = 'https://www.facebook.com/profile.php?id=61595184059128'
 
 function loadActivePoll(): ActivePoll | null {
   try {
@@ -136,6 +137,11 @@ export function Live({ presets, reloadPresets }: { presets: Preset[]; reloadPres
             </button>
           </div>
         )}
+        <div className="row actions">
+          <a className="btn" href={FACEBOOK_PAGE_URL} target="_blank" rel="noreferrer">
+            เปิดเพจ Facebook ↗
+          </a>
+        </div>
       </section>
 
       <section className="card">
