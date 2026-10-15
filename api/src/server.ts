@@ -2,6 +2,7 @@ import cookie from '@fastify/cookie'
 import multipart from '@fastify/multipart'
 import Fastify from 'fastify'
 import { config } from './config.js'
+import { db } from './db.js'
 import { authRoutes, requireAccount } from './routes/auth.js'
 import { liveRoutes } from './routes/live.js'
 import { presetRoutes } from './routes/presets.js'
@@ -21,3 +22,15 @@ await app.register(async (scope) => {
 })
 
 await app.listen({ port: config.port, host: '0.0.0.0' })
+
+// Railway ส่ง SIGTERM ให้ deployment เก่าทุกครั้งที่ deploy ใหม่ ถ้า process ออกด้วยโค้ดที่ไม่ใช่ 0
+// จะถูกนับว่า crash และส่งอีเมลแจ้ง จึงปิดเซิร์ฟเวอร์และฐานข้อมูลให้เรียบร้อยแล้วออกด้วย 0
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, async () => {
+    app.log.info(`${signal} received, shutting down`)
+    setTimeout(() => process.exit(0), 5000).unref()
+    await app.close().catch((err) => app.log.error(err))
+    db.close()
+    process.exit(0)
+  })
+}
