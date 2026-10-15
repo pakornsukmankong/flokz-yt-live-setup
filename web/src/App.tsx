@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, ApiError, type Me, type Preset } from './api'
 import { Live } from './Live'
 import { Presets } from './Presets'
+import { Timer } from './Timer'
+import { formatDuration, nextAlertIn, useTimer } from './timerStore'
 import { Toasts } from './toast'
 
 const LOGIN_ERRORS: Record<string, string> = {
@@ -13,7 +15,8 @@ const LOGIN_ERRORS: Record<string, string> = {
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
   const [presets, setPresets] = useState<Preset[]>([])
-  const [tab, setTab] = useState<'live' | 'presets'>('live')
+  const [tab, setTab] = useState<'live' | 'presets' | 'timer'>('live')
+  const timerState = useTimer()
   const [error, setError] = useState('')
 
   const reloadPresets = useCallback(async () => {
@@ -64,6 +67,10 @@ export function App() {
           <button className={tab === 'presets' ? 'tab on' : 'tab'} onClick={() => setTab('presets')}>
             Preset เกม
           </button>
+          <button className={tab === 'timer' ? 'tab on' : 'tab'} onClick={() => setTab('timer')}>
+            ตัวจับเวลา
+            {timerState.startedAt !== null && <span className="tab-badge">{formatDuration(nextAlertIn(timerState))}</span>}
+          </button>
         </nav>
         <span className="muted">{me.channelTitle ?? me.email}</span>
         <button className="btn" onClick={logout}>
@@ -71,11 +78,9 @@ export function App() {
         </button>
       </header>
       <main>
-        {tab === 'live' ? (
-          <Live presets={presets} reloadPresets={reloadPresets} />
-        ) : (
-          <Presets presets={presets} reloadPresets={reloadPresets} />
-        )}
+        {tab === 'live' && <Live presets={presets} reloadPresets={reloadPresets} />}
+        {tab === 'presets' && <Presets presets={presets} reloadPresets={reloadPresets} />}
+        {tab === 'timer' && <Timer />}
       </main>
       <Toasts />
     </div>
