@@ -1,52 +1,34 @@
-import { formatDuration, nextAlertIn, playChime, timer, useTimer } from './timerStore'
+import { formatClock, formatDuration, nextAlertAt, playChime, timer, useTimer } from './timerStore'
 
 export function Timer() {
   const t = useTimer()
-  const running = t.startedAt !== null
+  const next = nextAlertAt(t)
 
   return (
     <div className="stack">
       <section className="card form">
-        <h3>ตัวจับเวลา</h3>
-        <div className="chips">
-          {([30, 60] as const).map((m) => (
-            <button key={m} className={t.minutes === m ? 'chip on' : 'chip'} onClick={() => timer.setMinutes(m)}>
-              {m === 30 ? 'ทุก 30 นาที' : 'ทุก 1 ชั่วโมง'}
-            </button>
-          ))}
-        </div>
+        <h3>แจ้งเตือนตามเวลา</h3>
 
         <div className="countdown">
-          {running ? (
-            <>
-              <span className="muted">เตือนครั้งถัดไปใน</span>
-              <strong>{formatDuration(nextAlertIn(t))}</strong>
-              <span className="muted">
-                จับเวลามาแล้ว {formatDuration(t.now - t.startedAt!)} · เตือนไปแล้ว {t.alerts} ครั้ง
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="muted">ยังไม่ได้เริ่ม</span>
-              <strong>{formatDuration(t.minutes * 60_000)}</strong>
-            </>
-          )}
+          <span className="muted">ตอนนี้</span>
+          <strong>{new Date(t.now).toLocaleTimeString('th-TH')}</strong>
+          <span className="muted">
+            {next ? `แจ้งเตือนครั้งถัดไป ${formatClock(next)} น. (อีก ${formatDuration(next - t.now)})` : 'ปิดการแจ้งเตือนอยู่'}
+          </span>
         </div>
 
-        <div className="row">
-          {running ? (
-            <button className="btn danger" onClick={timer.stop}>
-              หยุด
-            </button>
-          ) : (
-            <button className="btn primary" onClick={timer.start}>
-              เริ่มจับเวลา
-            </button>
-          )}
-          <button className="btn" onClick={() => playChime()}>
-            ทดสอบเสียง
-          </button>
-        </div>
+        <label className="switch">
+          <input type="checkbox" role="switch" checked={t.halfHour} onChange={(e) => timer.setHalfHour(e.target.checked)} />
+          <span>
+            ทุก 30 นาที <span className="muted">ดังตอน xx:00 และ xx:30</span>
+          </span>
+        </label>
+        <label className="switch">
+          <input type="checkbox" role="switch" checked={t.hourly} onChange={(e) => timer.setHourly(e.target.checked)} />
+          <span>
+            ทุก 1 ชั่วโมง <span className="muted">ดังตอน xx:00</span>
+          </span>
+        </label>
 
         <label>
           ความดัง {Math.round(t.volume * 100)}%
@@ -60,9 +42,18 @@ export function Timer() {
           />
         </label>
 
+        <div className="row">
+          <button className="btn" onClick={() => playChime(false)}>
+            ทดสอบเสียง 30 นาที
+          </button>
+          <button className="btn" onClick={() => playChime(true)}>
+            ทดสอบเสียง 1 ชั่วโมง
+          </button>
+        </div>
+
         <p className="muted">
-          ต้องเปิดเว็บนี้ค้างไว้ เปลี่ยนไปแท็บอื่นของเบราว์เซอร์หรือสลับเมนูในแอปได้ แต่ห้ามปิดแท็บ ถ้าแท็บอยู่เบื้องหลังนาน ๆ
-          เบราว์เซอร์อาจทำให้เสียงช้าไปได้ไม่เกินราว 1 นาที เปลี่ยนรอบระหว่างจับเวลาจะเริ่มนับใหม่
+          ต้นชั่วโมงเสียงจะยาวกว่ารอบครึ่งชั่วโมง ต้องเปิดเว็บนี้ค้างไว้ เปลี่ยนไปแท็บอื่นของเบราว์เซอร์หรือสลับเมนูในแอปได้
+          แต่ห้ามปิดแท็บ ถ้าแท็บอยู่เบื้องหลังนาน ๆ เบราว์เซอร์อาจทำให้เสียงช้าไปได้ไม่เกินราว 1 นาที
         </p>
       </section>
     </div>

@@ -1,28 +1,23 @@
 import { useSyncExternalStore } from 'react'
 import { toast } from './toast'
 
-// ตัวจับเวลาอยู่นอก component จึงนับต่อได้แม้สลับไปแท็บอื่นในแอป และจำค่าไว้ใน localStorage ข้ามการรีเฟรช
+// แจ้งเตือนตามเวลาจริงบนนาฬิกา: ทุกครึ่งชั่วโมงดังที่ xx:00 และ xx:30 ทุกชั่วโมงดังที่ xx:00
+// ตัวจับเวลาอยู่นอก component จึงทำงานต่อแม้สลับเมนู และจำการตั้งค่าไว้ใน localStorage ข้ามการรีเฟรช
 export type TimerState = {
-  minutes: 30 | 60
+  halfHour: boolean
+  hourly: boolean
   volume: number
-  startedAt: number | null
-  alerts: number
   now: number
 }
 
-const KEY = 'timer'
+const KEY = 'clockAlerts'
+const HALF_HOUR = 30 * 60_000
 const listeners = new Set<() => void>()
 
 function load(): TimerState {
-  const now = Date.now()
-  const base: TimerState = { minutes: 30, volume: 0.6, startedAt: null, alerts: 0, now }
+  const base: TimerState = { halfHour: false, hourly: false, volume: 0.6, now: Date.now() }
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? 'null')
-    if (!saved) return base
-    const s = { ...base, ...saved, now }
-    // รอบที่เลยไปตอนปิดหน้าเว็บไม่ต้องดังย้อนหลัง
-    if (s.startedAt) s.alerts = Math.floor((now - s.startedAt) / (s.minutes * 60_000))
-    return s
+    return { ...base, ...JSON.parse(localStorage.getItem(KEY) ?? '{}'), now: Date.now() }
   } catch {
     return base
   }
@@ -43,12 +38,20 @@ function update(patch: Partial<TimerState>, persist = true) {
   listeners.forEach((fn) => fn())
 }
 
+// จุดเริ่มของช่วงครึ่งชั่วโมงที่เวลา t อยู่ ตามเวลาท้องถิ่น
+function slotStart(t: number): number {
+  const d = new Date(t)
+  d.setMinutes(d.getMinutes() < 30 ? 0 : 30, 0, 0)
+  return d.getTime()
+}
+
 let ctx: AudioContext | null = null
 
-export function playChime(volume = state.volume) {
+// รอบชั่วโมงเล่นทำนองสองรอบ รอบครึ่งชั่วโมงเล่นรอบเดียว จึงแยกได้ด้วยหู
+export function playChime(long = true, volume = state.volume) {
   ctx ??= new AudioContext()
   if (ctx.state === 'suspended') void ctx.resume()
-  const notes = [880, 1175, 1568, 880, 1175, 1568]
+  const notes = long ? [880, 1175, 1568, 880, 1175, 1568] : [880, 1175, 1568]
   notes.forEach((freq, i) => {
     const t = ctx!.currentTime + i * 0.22 + (i >= 3 ? 0.35 : 0)
     const osc = ctx!.createOscillator()
@@ -65,34 +68,48 @@ export function playChime(volume = state.volume) {
 }
 
 export const timer = {
-  start() {
-    playChime(0) // ปลดล็อกเสียงของเบราว์เซอร์ระหว่างที่ผู้ใช้กดปุ่ม
-    update({ startedAt: Date.now(), alerts: 0, now: Date.now() })
+  setHalfHour(on: boolean) {
+    if (on) playChime(false, 0) // ปลดล็อกเสียงของเบราว์เซอร์ระหว่างที่ผู้ใช้กด
+    update({ halfHour: on })
   },
-  stop() {
-    update({ startedAt: null, alerts: 0 })
-  },
-  setMinutes(minutes: 30 | 60) {
-    update({ minutes, ...(state.startedAt ? { startedAt: Date.now(), alerts: 0 } : {}) })
+  setHourly(on: boolean) {
+    if (on) playChime(false, 0)
+    update({ hourly: on })
   },
   setVolume(volume: number) {
     update({ volume })
   },
 }
 
-// คำนวณจากเวลาจริงทุกวินาที แม้เบราว์เซอร์จะชะลอแท็บเบื้องหลัง เวลาเตือนก็ไม่เลื่อนสะสม
-setInterval(() => {
-  if (!state.startedAt) return
-  const now = Date.now()
-  const round = Math.floor((now - state.startedAt) / (state.minutes * 60_000))
-  if (round > state.alerts) {
-    playChime()
-    const total = round * state.minutes
-    toast.success(`ครบ ${total >= 60 ? `${Math.floor(total / 60)} ชั่วโมง${total % 60 ? ` ${total % 60} นาที` : ''}` : `${total} นาที`} แล้ว`)
-    update({ alerts: round, now })
-  } else {
-    update({ now }, false)
+export function nextAlertAt(s: TimerState): number | null {
+  if (s.halfHour) return slotStart(s.now) + HALF_HOUR
+  if (s.hourly) {
+    const d = new Date(s.now)
+    d.setHours(d.getHours() + 1, 0, 0, 0)
+    return d.getTime()
   }
+  return null
+}
+
+export function formatClock(t: number): string {
+  return new Date(t).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+}
+
+// เปิดหน้าเว็บกลางช่วงไม่ต้องดังทันที นับจากช่วงปัจจุบัน
+let lastSlot = slotStart(Date.now())
+
+setInterval(() => {
+  const now = Date.now()
+  const slot = slotStart(now)
+  if (slot > lastSlot) {
+    lastSlot = slot
+    const onHour = new Date(slot).getMinutes() === 0
+    if ((onHour && (state.hourly || state.halfHour)) || (!onHour && state.halfHour)) {
+      playChime(onHour)
+      toast.success(`ตอนนี้ ${formatClock(slot)} น.`)
+    }
+  }
+  update({ now }, false)
 }, 1000)
 
 export function useTimer(): TimerState {
@@ -111,10 +128,4 @@ export function formatDuration(ms: number): string {
   const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
   const ss = String(s % 60).padStart(2, '0')
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
-}
-
-export function nextAlertIn(s: TimerState): number {
-  if (!s.startedAt) return 0
-  const period = s.minutes * 60_000
-  return s.startedAt + (s.alerts + 1) * period - s.now
 }

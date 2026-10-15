@@ -3,7 +3,7 @@ import { api, ApiError, type Me, type Preset } from './api'
 import { Live } from './Live'
 import { Presets } from './Presets'
 import { Timer } from './Timer'
-import { formatDuration, nextAlertIn, useTimer } from './timerStore'
+import { formatClock, nextAlertAt, useTimer } from './timerStore'
 import { Toasts } from './toast'
 
 const LOGIN_ERRORS: Record<string, string> = {
@@ -69,7 +69,7 @@ export function App() {
           </button>
           <button className={tab === 'timer' ? 'tab on' : 'tab'} onClick={() => setTab('timer')}>
             ตัวจับเวลา
-            {timerState.startedAt !== null && <span className="tab-badge">{formatDuration(nextAlertIn(timerState))}</span>}
+            {nextAlertAt(timerState) !== null && <span className="tab-badge">{formatClock(nextAlertAt(timerState)!)}</span>}
           </button>
         </nav>
         <span className="muted">{me.channelTitle ?? me.email}</span>
