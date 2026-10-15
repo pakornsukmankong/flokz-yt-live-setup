@@ -77,6 +77,9 @@ export function App() {
           ออกจากระบบ
         </button>
       </header>
+      {nextAlertAt(timerState) !== null && !timerState.audioReady && (
+        <div className="notice">เปิดแจ้งเตือนตามเวลาไว้ แต่เสียงยังไม่พร้อม: คลิกที่ใดก็ได้บนหน้านี้หนึ่งครั้ง</div>
+      )}
       <main>
         {tab === 'live' && <Live presets={presets} reloadPresets={reloadPresets} />}
         {tab === 'presets' && <Presets presets={presets} reloadPresets={reloadPresets} />}

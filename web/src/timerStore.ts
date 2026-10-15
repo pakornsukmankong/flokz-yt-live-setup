@@ -8,6 +8,8 @@ export type TimerState = {
   hourly: boolean
   volume: number
   now: number
+  // เบราว์เซอร์ไม่ให้เว็บเล่นเสียงจนกว่าผู้ใช้จะคลิกหรือกดปุ่มบนหน้าอย่างน้อยหนึ่งครั้งหลังเปิดหน้า
+  audioReady: boolean
 }
 
 const KEY = 'clockAlerts'
@@ -15,9 +17,10 @@ const HALF_HOUR = 30 * 60_000
 const listeners = new Set<() => void>()
 
 function load(): TimerState {
-  const base: TimerState = { halfHour: false, hourly: false, volume: 0.6, now: Date.now() }
+  const base: TimerState = { halfHour: false, hourly: false, volume: 0.6, now: Date.now(), audioReady: false }
   try {
-    return { ...base, ...JSON.parse(localStorage.getItem(KEY) ?? '{}'), now: Date.now() }
+    const { halfHour, hourly, volume } = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    return { ...base, ...(halfHour !== undefined && { halfHour, hourly, volume }) }
   } catch {
     return base
   }
@@ -29,8 +32,8 @@ function update(patch: Partial<TimerState>, persist = true) {
   state = { ...state, ...patch }
   if (persist) {
     try {
-      const { now, ...saved } = state
-      localStorage.setItem(KEY, JSON.stringify(saved))
+      const { halfHour, hourly, volume } = state
+      localStorage.setItem(KEY, JSON.stringify({ halfHour, hourly, volume }))
     } catch {
       // ใช้ต่อได้แม้เบราว์เซอร์ไม่ให้เก็บข้อมูล
     }
@@ -45,15 +48,44 @@ function slotStart(t: number): number {
   return d.getTime()
 }
 
+function isOnHour(t: number): boolean {
+  return new Date(t).getMinutes() === 0
+}
+
+function alertsAt(slot: number, s: TimerState): boolean {
+  return isOnHour(slot) ? s.hourly || s.halfHour : s.halfHour
+}
+
+export function nextAlertAt(s: TimerState): number | null {
+  if (!s.halfHour && !s.hourly) return null
+  let slot = slotStart(s.now) + HALF_HOUR
+  while (!alertsAt(slot, s)) slot += HALF_HOUR
+  return slot
+}
+
+// ---- เสียง ----
+
 let ctx: AudioContext | null = null
 
-// รอบชั่วโมงเล่นทำนองสองรอบ รอบครึ่งชั่วโมงเล่นรอบเดียว จึงแยกได้ด้วยหู
-export function playChime(long = true, volume = state.volume) {
+function unlockAudio() {
   ctx ??= new AudioContext()
-  if (ctx.state === 'suspended') void ctx.resume()
+  ctx.onstatechange = () => {
+    update({ audioReady: ctx!.state === 'running' }, false)
+    reschedule()
+  }
+  if (ctx.state !== 'running') void ctx.resume()
+}
+
+// ทุกครั้งที่ผู้ใช้คลิกหรือกดคีย์บนหน้า ให้ปลดล็อกเสียงไว้ล่วงหน้า
+for (const event of ['pointerdown', 'keydown'] as const) {
+  window.addEventListener(event, unlockAudio, { capture: true })
+}
+
+// รอบชั่วโมงเล่นทำนองสองรอบ รอบครึ่งชั่วโมงเล่นรอบเดียว จึงแยกได้ด้วยหู
+function chimeNodes(at: number, long: boolean, volume: number): OscillatorNode[] {
   const notes = long ? [880, 1175, 1568, 880, 1175, 1568] : [880, 1175, 1568]
-  notes.forEach((freq, i) => {
-    const t = ctx!.currentTime + i * 0.22 + (i >= 3 ? 0.35 : 0)
+  return notes.map((freq, i) => {
+    const t = at + i * 0.22 + (i >= 3 ? 0.35 : 0)
     const osc = ctx!.createOscillator()
     const gain = ctx!.createGain()
     osc.type = 'sine'
@@ -64,31 +96,49 @@ export function playChime(long = true, volume = state.volume) {
     osc.connect(gain).connect(ctx!.destination)
     osc.start(t)
     osc.stop(t + 0.5)
+    return osc
   })
+}
+
+export function playChime(long = true) {
+  unlockAudio()
+  chimeNodes(ctx!.currentTime, long, state.volume)
+}
+
+// จองเสียงครั้งถัดไปไว้บนนาฬิกาของระบบเสียงล่วงหน้า เบราว์เซอร์ไม่ชะลอนาฬิกานี้ในแท็บเบื้องหลัง
+// (ต่างจาก setInterval ที่ถูกชะลอได้ถึงนาทีละครั้ง) เสียงจึงดังตรงเวลาแม้ไม่ได้เปิดแท็บนี้อยู่
+let scheduled: { slot: number; nodes: OscillatorNode[] } | null = null
+
+function reschedule() {
+  if (scheduled && ctx) {
+    for (const osc of scheduled.nodes) {
+      try {
+        osc.stop(0)
+      } catch {
+        // เล่นจบไปแล้ว
+      }
+    }
+  }
+  scheduled = null
+  const next = nextAlertAt({ ...state, now: Date.now() })
+  if (!next || !ctx || ctx.state !== 'running') return
+  const at = ctx.currentTime + (next - Date.now()) / 1000
+  scheduled = { slot: next, nodes: chimeNodes(at, isOnHour(next), state.volume) }
 }
 
 export const timer = {
   setHalfHour(on: boolean) {
-    if (on) playChime(false, 0) // ปลดล็อกเสียงของเบราว์เซอร์ระหว่างที่ผู้ใช้กด
     update({ halfHour: on })
+    reschedule()
   },
   setHourly(on: boolean) {
-    if (on) playChime(false, 0)
     update({ hourly: on })
+    reschedule()
   },
   setVolume(volume: number) {
     update({ volume })
+    reschedule()
   },
-}
-
-export function nextAlertAt(s: TimerState): number | null {
-  if (s.halfHour) return slotStart(s.now) + HALF_HOUR
-  if (s.hourly) {
-    const d = new Date(s.now)
-    d.setHours(d.getHours() + 1, 0, 0, 0)
-    return d.getTime()
-  }
-  return null
 }
 
 export function formatClock(t: number): string {
@@ -97,17 +147,23 @@ export function formatClock(t: number): string {
 
 // เปิดหน้าเว็บกลางช่วงไม่ต้องดังทันที นับจากช่วงปัจจุบัน
 let lastSlot = slotStart(Date.now())
+let lastResync = Date.now()
 
 setInterval(() => {
   const now = Date.now()
   const slot = slotStart(now)
   if (slot > lastSlot) {
     lastSlot = slot
-    const onHour = new Date(slot).getMinutes() === 0
-    if ((onHour && (state.hourly || state.halfHour)) || (!onHour && state.halfHour)) {
-      playChime(onHour)
+    if (alertsAt(slot, state)) {
+      // เสียงถูกจองไว้แล้ว ถ้าไม่ได้จอง (เช่น เพิ่งปลดล็อกเสียง) และยังไม่สายเกินไปให้เล่นตอนนี้แทน
+      if (scheduled?.slot !== slot && ctx?.state === 'running' && now - slot < 60_000) playChime(isOnHour(slot))
       toast.success(`ตอนนี้ ${formatClock(slot)} น.`)
     }
+    reschedule()
+  } else if (now - lastResync > 60_000) {
+    // จองใหม่ทุกนาทีเพื่อแก้เวลาที่เลื่อน เช่น หลังเครื่องหลับแล้วตื่น
+    lastResync = now
+    if (!scheduled || scheduled.slot - now > 5_000) reschedule()
   }
   update({ now }, false)
 }, 1000)

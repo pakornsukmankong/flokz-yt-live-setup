@@ -105,6 +105,16 @@ main {
   padding: 24px 16px 48px;
 }
 
+.notice {
+  max-width: 1000px;
+  margin: 16px auto 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 93, 108, 0.5);
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  width: calc(100% - 32px);
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
