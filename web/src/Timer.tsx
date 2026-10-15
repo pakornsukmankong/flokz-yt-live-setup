@@ -1,4 +1,4 @@
-import { formatClock, formatDuration, nextAlertAt, playChime, timer, useTimer } from './timerStore'
+import { formatClock, formatDuration, nextAlertAt, playChime, stopChime, timer, useTimer } from './timerStore'
 
 export function Timer() {
   const t = useTimer()
@@ -42,17 +42,20 @@ export function Timer() {
           />
         </label>
 
-        <div className="row">
+        <div className="row wrap">
           <button className="btn" onClick={() => playChime(false)}>
             ทดสอบเสียง 30 นาที
           </button>
           <button className="btn" onClick={() => playChime(true)}>
             ทดสอบเสียง 1 ชั่วโมง
           </button>
+          <button className="btn" onClick={stopChime}>
+            หยุดเสียง
+          </button>
         </div>
 
         <p className="muted">
-          ต้นชั่วโมงเสียงจะยาวกว่ารอบครึ่งชั่วโมง ต้องเปิดเว็บนี้ค้างไว้ สลับไปแท็บอื่นของเบราว์เซอร์หรือสลับเมนูในแอปได้
+          เสียงเตือนดังราว 10 วินาที ต้นชั่วโมงเป็นทำนองขึ้นแล้วลง รอบครึ่งชั่วโมงเป็นทำนองขึ้นอย่างเดียว ต้องเปิดเว็บนี้ค้างไว้ สลับไปแท็บอื่นของเบราว์เซอร์หรือสลับเมนูในแอปได้
           แต่ห้ามปิดแท็บ ทุกครั้งที่เปิดหรือรีเฟรชหน้า ต้องคลิกบนหน้านี้หนึ่งครั้งก่อน เบราว์เซอร์ถึงจะยอมให้เล่นเสียง
         </p>
       </section>

@@ -81,49 +81,84 @@ for (const event of ['pointerdown', 'keydown'] as const) {
   window.addEventListener(event, unlockAudio, { capture: true })
 }
 
-// รอบชั่วโมงเล่นทำนองสองรอบ รอบครึ่งชั่วโมงเล่นรอบเดียว จึงแยกได้ด้วยหู
-function chimeNodes(at: number, long: boolean, volume: number): OscillatorNode[] {
-  const notes = long ? [880, 1175, 1568, 880, 1175, 1568] : [880, 1175, 1568]
-  return notes.map((freq, i) => {
-    const t = at + i * 0.22 + (i >= 3 ? 0.35 : 0)
-    const osc = ctx!.createOscillator()
-    const gain = ctx!.createGain()
-    osc.type = 'sine'
-    osc.frequency.value = freq
-    gain.gain.setValueAtTime(0, t)
-    gain.gain.linearRampToValueAtTime(volume, t + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5)
-    osc.connect(gain).connect(ctx!.destination)
-    osc.start(t)
-    osc.stop(t + 0.5)
-    return osc
-  })
+const CHIME_SECONDS = 10
+
+type Chime = { start: number; nodes: OscillatorNode[] }
+
+function silence(chime: Chime) {
+  for (const osc of chime.nodes) {
+    try {
+      osc.stop(0)
+    } catch {
+      // เล่นจบไปแล้ว
+    }
+  }
+}
+
+// เล่นทำนองวนซ้ำให้ยาวราว 10 วินาที ต้นชั่วโมงเป็นทำนองขึ้นแล้วลง รอบครึ่งชั่วโมงเป็นทำนองขึ้นอย่างเดียว จึงแยกได้ด้วยหู
+function chimeAt(at: number, long: boolean, volume: number): Chime {
+  const phrase = long ? [880, 1175, 1568, 1175, 880] : [880, 1175, 1568]
+  const phraseLength = phrase.length * 0.22 + 0.5
+  const repeats = Math.ceil(CHIME_SECONDS / phraseLength)
+  const nodes: OscillatorNode[] = []
+  for (let r = 0; r < repeats; r++) {
+    phrase.forEach((freq, i) => {
+      const t = at + r * phraseLength + i * 0.22
+      const osc = ctx!.createOscillator()
+      const gain = ctx!.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(volume, t + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.5)
+      osc.connect(gain).connect(ctx!.destination)
+      osc.start(t)
+      osc.stop(t + 0.5)
+      nodes.push(osc)
+    })
+  }
+  return { start: at, nodes }
+}
+
+// เสียงที่กำลังดังอยู่ (จากปุ่มทดสอบหรือจากการแจ้งเตือน) เก็บไว้เพื่อให้กดหยุดได้
+let sounding: Chime[] = []
+
+function keepSounding(chime: Chime) {
+  sounding = sounding.filter((c) => c.start + CHIME_SECONDS + 1 > ctx!.currentTime)
+  sounding.push(chime)
 }
 
 export function playChime(long = true) {
   unlockAudio()
-  chimeNodes(ctx!.currentTime, long, state.volume)
+  keepSounding(chimeAt(ctx!.currentTime, long, state.volume))
+}
+
+export function stopChime() {
+  if (!ctx) return
+  const now = ctx.currentTime
+  sounding.forEach(silence)
+  sounding = []
+  if (scheduled && scheduled.chime.start <= now) {
+    silence(scheduled.chime)
+    scheduled = null
+  }
 }
 
 // จองเสียงครั้งถัดไปไว้บนนาฬิกาของระบบเสียงล่วงหน้า เบราว์เซอร์ไม่ชะลอนาฬิกานี้ในแท็บเบื้องหลัง
 // (ต่างจาก setInterval ที่ถูกชะลอได้ถึงนาทีละครั้ง) เสียงจึงดังตรงเวลาแม้ไม่ได้เปิดแท็บนี้อยู่
-let scheduled: { slot: number; nodes: OscillatorNode[] } | null = null
+let scheduled: { slot: number; chime: Chime } | null = null
 
 function reschedule() {
   if (scheduled && ctx) {
-    for (const osc of scheduled.nodes) {
-      try {
-        osc.stop(0)
-      } catch {
-        // เล่นจบไปแล้ว
-      }
-    }
+    // เสียงที่เริ่มดังไปแล้วปล่อยให้ดังจนจบ ยกเลิกเฉพาะที่ยังไม่ถึงเวลา
+    if (scheduled.chime.start > ctx.currentTime) silence(scheduled.chime)
+    else keepSounding(scheduled.chime)
   }
   scheduled = null
   const next = nextAlertAt({ ...state, now: Date.now() })
   if (!next || !ctx || ctx.state !== 'running') return
   const at = ctx.currentTime + (next - Date.now()) / 1000
-  scheduled = { slot: next, nodes: chimeNodes(at, isOnHour(next), state.volume) }
+  scheduled = { slot: next, chime: chimeAt(at, isOnHour(next), state.volume) }
 }
 
 export const timer = {

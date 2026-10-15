@@ -179,6 +179,10 @@ main {
   flex: 1;
 }
 
+.wrap {
+  flex-wrap: wrap;
+}
+
 .between {
   justify-content: space-between;
 }
